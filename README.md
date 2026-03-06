@@ -1,17 +1,17 @@
 # groovebox
 
-A terminal-based YouTube audio player built in Rust. Search for music, build playlists, and listen - all from your terminal with album art, real-time spectrum visualizers, and chapter support.
+A terminal-based YouTube audio player built in Rust. Search, build playlists, and listen from your terminal with album art, spectrum visualizers, and chapter support.
 
 ![groovebox](assets/screenshot.png)
 
 ## Features
 
 **Audio**
-- Stream audio directly from YouTube - no downloads to disk
+- Stream audio directly from YouTube, nothing saved to disk
 - Volume control, seek with acceleration, pause/resume
 - Shuffle and repeat modes (off, one, all)
 - Auto-plays related tracks when the queue runs out
-- Session restore - picks up where you left off on restart
+- Session restore picks up where you left off on restart
 
 **Discovery**
 - YouTube search from the terminal
@@ -31,7 +31,7 @@ A terminal-based YouTube audio player built in Rust. Search for music, build pla
 
 ### Prerequisites
 
-**Required - these must be on your PATH:**
+**Required (must be on your PATH):**
 
 | Program | Purpose | Install |
 |---------|---------|---------|
@@ -57,8 +57,8 @@ sudo pacman -S alsa-lib
 macOS needs no additional build dependencies.
 
 **Optional:**
-- **PulseAudio** - required for the spectrum visualizer (most Linux desktops have this already; `parec` and `pactl` must be available)
-- **A terminal with image protocol support** - for album art thumbnails (Kitty, WezTerm, iTerm2, foot, etc.)
+- **PulseAudio** for the spectrum visualizer (most Linux desktops have this; needs `parec` and `pactl`)
+- **A terminal with image protocol support** for album art thumbnails (Kitty, WezTerm, iTerm2, foot, etc.)
 
 ### Build & Run
 
