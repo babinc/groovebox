@@ -3,8 +3,25 @@ pub mod state;
 
 use std::collections::HashMap;
 use std::io;
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::time::Duration;
+
+#[cfg(debug_assertions)]
+fn log(msg: &str) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true).append(true)
+        .open("/tmp/groovebox.log")
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let _ = writeln!(f, "[{:.3}] {msg}", now.as_secs_f64());
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn log(_msg: &str) {}
 
 use anyhow::Result;
 use crossterm::event::{self, Event};
@@ -16,7 +33,8 @@ use crate::audio::fft;
 use crate::audio::mpv::MpvPlayer;
 use crate::audio::types::{PlayStatus, PlaybackState, SpectrumData};
 use crate::models::Track;
-use crate::storage::{categories, database, history, playlists};
+use crate::storage::{database, history, playlists, settings, tracks};
+use crate::ui::theme;
 use crate::youtube::{metadata, search, thumbnail};
 use events::AppAction;
 use state::AppState;
@@ -44,6 +62,8 @@ pub struct App {
     thumb_cache: HashMap<String, ratatui_image::protocol::StatefulProtocol>,
     image_picker: Option<ratatui_image::picker::Picker>,
     pending_play: Option<(Track, String)>,
+    auto_resume: Option<(Track, f64)>, // track + position to resume on startup
+    resume_seek: Option<f64>,         // seek to this position once playback starts
 }
 
 impl App {
@@ -51,11 +71,48 @@ impl App {
         let db = database::open_database()?;
 
         let playlist_list = playlists::list_playlists(&db).unwrap_or_default();
-        let category_list = categories::list_categories(&db).unwrap_or_default();
+
+        // Load saved theme
+        if let Some(theme_idx) = settings::get_parsed::<usize>(&db, "theme_index") {
+            theme::set_theme(theme_idx);
+        }
+
+        // Load saved EQ style
+        let eq_style = settings::get_parsed::<u8>(&db, "eq_style")
+            .and_then(|i| state::EqStyle::ALL.get(i as usize).copied())
+            .unwrap_or(state::EqStyle::Bars);
+
+        // Load preferences
+        let mut prefs = state::Preferences::default();
+        for &(key, _) in state::Preferences::KEYS {
+            if let Some(val) = settings::get_setting(&db, key).ok().flatten() {
+                match val.as_str() {
+                    "0" => { if prefs.get(key) { prefs.toggle(key); } }
+                    "1" => { if !prefs.get(key) { prefs.toggle(key); } }
+                    _ => {}
+                }
+            }
+        }
+
+        // Restore last session track
+        let last_track = settings::get_setting(&db, "last_track_id")
+            .ok()
+            .flatten()
+            .and_then(|yt_id| tracks::get_track_by_youtube_id(&db, &yt_id).ok());
+        let last_position = settings::get_parsed::<f64>(&db, "last_position").unwrap_or(0.0);
 
         let mut state = AppState::default();
         state.playlists = playlist_list;
-        state.categories = category_list;
+        state.eq_style = eq_style;
+        state.preferences = prefs;
+
+        // If we have a last track, put it in the queue ready to play
+        if let Some(ref track) = last_track {
+            state.search_results = vec![track.clone()];
+            state.queue = vec![track.clone()];
+            state.preview_track = Some(track.clone());
+            state.content_view = state::ContentView::SearchResults;
+        }
 
         let (spectrum_tx, spectrum_rx) = watch::channel(SpectrumData::default());
         fft::spawn_fft_task(spectrum_tx);
@@ -70,6 +127,12 @@ impl App {
 
         let (bg_tx, bg_rx) = mpsc::channel(64);
 
+        let auto_resume = if state.preferences.auto_resume {
+            last_track.map(|t| (t, last_position))
+        } else {
+            None
+        };
+
         Ok(Self {
             state,
             mpv: None,
@@ -83,6 +146,8 @@ impl App {
             thumb_cache: HashMap::new(),
             image_picker,
             pending_play: None,
+            resume_seek: None,
+            auto_resume,
         })
     }
 
@@ -96,6 +161,18 @@ impl App {
     }
 
     pub async fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+        // Load thumbnails for any restored session tracks
+        if !self.state.search_results.is_empty() {
+            self.spawn_thumbnail_batch();
+        }
+
+        // Auto-resume playback from last session
+        if let Some((_track, position)) = self.auto_resume.take() {
+            self.play_track_at_index(0);
+            // Store seek position to apply after mpv starts playing
+            self.resume_seek = if position > 5.0 { Some(position - 2.0) } else { None };
+        }
+
         let mut preview_debounce: u8 = 0;
 
         while self.state.running {
@@ -104,20 +181,57 @@ impl App {
             while event::poll(Duration::from_millis(0))? {
                 if let Event::Key(key) = event::read()? {
                     let action = events::handle_key(&mut self.state, key);
+                    match &action {
+                        AppAction::None => {}
+                        other => log(&format!("ACTION: {other:?} content_index={} queue_index={:?}", self.state.content_index, self.state.queue_index)),
+                    }
                     self.handle_action(action).await;
                     had_input = true;
                 }
             }
 
+            // 1b. If more input is already pending, skip expensive draw and keep draining
+            if had_input && event::poll(Duration::from_millis(0))? {
+                continue;
+            }
+
             // 2. Drain channel updates (non-blocking)
             if let Some(ref mut rx) = self.playback_rx {
+                let is_loading = self.state.loading.active || self.pending_play.is_some();
                 while let Ok(pb_state) = rx.try_recv() {
                     let track = self.state.playback.current_track.clone();
                     let volume = self.state.playback.volume;
+                    // Don't let mpv's end-file event overwrite Buffering with Stopped
+                    // during loading — that would trigger a false auto-next
+                    let ignore_stopped = is_loading
+                        && pb_state.status == PlayStatus::Stopped;
                     self.state.playback = pb_state;
                     self.state.playback.current_track = track;
+                    if ignore_stopped {
+                        log(&format!("MPV: ignoring Stopped (is_loading=true), keeping Buffering"));
+                        self.state.playback.status = PlayStatus::Buffering;
+                    } else if self.state.playback.status == PlayStatus::Stopped {
+                        log(&format!("MPV: status -> Stopped (queue_index={:?}, loading={}, pending={})",
+                            self.state.queue_index, self.state.loading.active, self.pending_play.is_some()));
+                    } else if self.state.playback.status == PlayStatus::Playing {
+                        log("MPV: status -> Playing");
+                    }
                     if (self.state.playback.volume - volume).abs() > 0.5 {
                         self.state.playback.volume = volume;
+                    }
+                }
+            }
+
+            // Clear loading state once mpv actually starts playing
+            if self.state.playback.status == PlayStatus::Playing
+                && self.state.loading.active
+                && self.state.loading.kind == state::LoadingKind::Buffering
+            {
+                self.state.loading.active = false;
+                // Apply resume seek if pending
+                if let Some(pos) = self.resume_seek.take() {
+                    if let Some(ref mut mpv) = self.mpv {
+                        let _ = mpv.seek_absolute(pos).await;
                     }
                 }
             }
@@ -128,9 +242,21 @@ impl App {
 
             self.process_pending_play().await;
 
-            // 3. Update spectrum
+            // 3. Update spectrum + peak decay
             if self.spectrum_rx.has_changed().unwrap_or(false) {
                 self.state.spectrum = self.spectrum_rx.borrow_and_update().clone();
+                // Update peak hold values (for Peaks style)
+                for (i, &val) in self.state.spectrum.bins.iter().enumerate() {
+                    if i < self.state.eq_peaks.len() {
+                        if val > self.state.eq_peaks[i] {
+                            self.state.eq_peaks[i] = val;
+                        } else {
+                            // Fast decay, snap to zero when tiny
+                            let decayed = self.state.eq_peaks[i] * 0.92;
+                            self.state.eq_peaks[i] = if decayed < 0.05 { 0.0 } else { decayed };
+                        }
+                    }
+                }
             }
 
             // 4. Toast timer
@@ -139,6 +265,14 @@ impl App {
                 if self.state.toast_timer == 0 {
                     self.state.toast_message = None;
                 }
+            }
+
+            // Theme selector timer
+            if self.state.theme_selector_timer > 0 {
+                self.state.theme_selector_timer -= 1;
+            }
+            if self.state.eq_selector_timer > 0 {
+                self.state.eq_selector_timer -= 1;
             }
 
             // 5. Loading animation tick
@@ -177,13 +311,18 @@ impl App {
             }
 
             // 7. Detect end-of-track for auto-next
+            //    Only when truly idle — not during loading or pending play
             if self.state.playback.status == PlayStatus::Stopped
                 && self.state.queue_index.is_some()
+                && !self.state.loading.active
+                && self.pending_play.is_none()
             {
+                log(&format!("AUTO-NEXT: triggered, queue_index={:?}", self.state.queue_index));
                 self.handle_auto_next().await;
             }
 
             // 8. Draw
+            self.state.frame_count = self.state.frame_count.wrapping_add(1);
             terminal.draw(|f| {
                 crate::ui::draw(f, &self.state, &mut self.thumb_protocol, &mut self.thumb_cache);
             })?;
@@ -197,7 +336,17 @@ impl App {
         }
 
         self.record_current_play();
+        // Save last track + position for session restore
+        if let Some(ref track) = self.state.playback.current_track {
+            let _ = settings::set_setting(&self.db, "last_track_id", &track.youtube_id);
+            let _ = settings::set_setting(&self.db, "last_position", &self.state.playback.position.to_string());
+        }
         fft::set_fft_active(false);
+
+        // Kill mpv process
+        if let Some(ref mut mpv) = self.mpv {
+            let _ = mpv.quit().await;
+        }
 
         Ok(())
     }
@@ -209,12 +358,7 @@ impl App {
                 self.state.loading.active = false;
                 match res {
                     Ok(results) => {
-                        self.state.search_results = results.clone();
-                        self.state.queue = results;
-                        self.state.content_index = 0;
-                        self.state.last_preview_index = None;
-                        // Spawn thumbnail loading in background
-                        self.spawn_thumbnail_batch();
+                        self.replace_queue(results);
                     }
                     Err(e) => {
                         self.state.toast_message = Some(format!("Search error: {e}"));
@@ -242,7 +386,7 @@ impl App {
             }
             BgResult::ThumbnailBatchDone => {
                 if self.state.loading.active
-                    && self.state.loading.message.contains("thumbnails")
+                    && self.state.loading.kind == state::LoadingKind::Thumbnails
                 {
                     self.state.loading.active = false;
                 }
@@ -253,6 +397,7 @@ impl App {
                         self.state.queue_index = Some(idx);
                         self.state.playback.current_track = Some(track.clone());
                         self.state.playback.status = PlayStatus::Buffering;
+                        self.state.loading.kind = state::LoadingKind::Buffering;
                         self.state.loading.message = "Buffering audio...".into();
 
                         // Store url for the run loop to pick up
@@ -287,11 +432,7 @@ impl App {
             BgResult::PlaylistTracksReady(res) => {
                 self.state.loading.active = false;
                 if let Ok(tracks) = res {
-                    self.state.search_results = tracks.clone();
-                    self.state.queue = tracks;
-                    self.state.content_index = 0;
-                    self.state.last_preview_index = None;
-                    self.spawn_thumbnail_batch();
+                    self.replace_queue(tracks);
                 }
             }
         }
@@ -306,6 +447,7 @@ impl App {
             AppAction::Search(query) => {
                 self.state.searching = true;
                 self.state.loading.active = true;
+                self.state.loading.kind = state::LoadingKind::Search;
                 self.state.loading.message = format!("Searching \"{query}\"...");
                 self.state.loading.progress = -1.0; // indeterminate
                 self.state.loading.completed = 0;
@@ -390,21 +532,42 @@ impl App {
             }
             AppAction::LoadHistory => {
                 self.state.history = history::get_history(&self.db, 50).unwrap_or_default();
+                // Single JOIN query for full Track objects (no N+1)
+                let tracks = history::get_history_tracks(&self.db, 50).unwrap_or_default();
+                self.replace_queue(tracks);
+            }
+            AppAction::CycleEq => {
+                self.state.eq_style = self.state.eq_style.next();
+                self.state.toast_message = Some(format!("EQ: {}", self.state.eq_style.label()));
+                self.state.toast_timer = 30;
+                self.state.eq_selector_timer = 40;
+                let _ = settings::set_setting(&self.db, "eq_style", &(self.state.eq_style as u8).to_string());
+            }
+            AppAction::CycleTheme => {
+                theme::cycle_theme();
+                self.state.theme_selector_timer = 40;
+                let _ = settings::set_setting(&self.db, "theme_index", &theme::current_index().to_string());
+            }
+            AppAction::ToggleSetting(idx) => {
+                if let Some(&(key, label)) = state::Preferences::KEYS.get(idx) {
+                    self.state.preferences.toggle(key);
+                    let val = self.state.preferences.get(key);
+                    let _ = settings::set_setting(&self.db, key, if val { "1" } else { "0" });
+                    self.state.toast_message = Some(format!("{}: {}", label, if val { "On" } else { "Off" }));
+                    self.state.toast_timer = 30;
+                }
             }
             AppAction::LoadPlaylistTracks(id) => {
                 self.state.loading.active = true;
+                self.state.loading.kind = state::LoadingKind::Playlist;
                 self.state.loading.message = "Loading playlist...".into();
                 self.state.loading.progress = -1.0;
                 self.state.loading.completed = 0;
 
                 // DB access is sync, do it here, then spawn thumbnail loading
                 if let Ok(tracks) = playlists::get_playlist_tracks(&self.db, id) {
-                    self.state.search_results = tracks.clone();
-                    self.state.queue = tracks;
-                    self.state.content_index = 0;
-                    self.state.last_preview_index = None;
                     self.state.loading.active = false;
-                    self.spawn_thumbnail_batch();
+                    self.replace_queue(tracks);
                 } else {
                     self.state.loading.active = false;
                 }
@@ -427,6 +590,7 @@ impl App {
         }
 
         self.state.loading.active = true;
+        self.state.loading.kind = state::LoadingKind::Thumbnails;
         self.state.loading.message = format!("Loading {} thumbnails...", tracks.len());
         self.state.loading.progress = 0.0;
         self.state.loading.total = tracks.len();
@@ -446,8 +610,6 @@ impl App {
     fn play_track_at_index(&mut self, idx: usize) {
         let track = if idx < self.state.queue.len() {
             self.state.queue[idx].clone()
-        } else if idx < self.state.search_results.len() {
-            self.state.search_results[idx].clone()
         } else {
             return;
         };
@@ -459,6 +621,7 @@ impl App {
         self.state.playback.status = PlayStatus::Buffering;
 
         self.state.loading.active = true;
+        self.state.loading.kind = state::LoadingKind::Buffering;
         self.state.loading.message = format!("Loading: {}...", track.title);
         self.state.loading.progress = -1.0;
         self.state.loading.completed = 0;
@@ -492,7 +655,9 @@ impl App {
                 }
             }
 
-            self.state.loading.active = false;
+            // Don't clear loading.active here — wait for mpv to report Playing.
+            // Clearing it now would let stale end-file events through as Stopped,
+            // triggering a false auto-next cascade.
             fft::set_fft_active(true);
             self.load_thumbnail_sync(&track);
 
@@ -535,6 +700,18 @@ impl App {
         }
         self.thumb_protocol = None;
         self.thumb_protocol_id.clear();
+    }
+
+    /// Replace the queue and search results with new tracks, resetting navigation state.
+    fn replace_queue(&mut self, tracks: Vec<Track>) {
+        self.state.queue = tracks.clone();
+        self.state.search_results = tracks;
+        self.state.content_index = 0;
+        self.state.last_preview_index = None;
+        if self.state.playback.status == PlayStatus::Stopped {
+            self.state.queue_index = None;
+        }
+        self.spawn_thumbnail_batch();
     }
 
     fn next_track(&mut self) {

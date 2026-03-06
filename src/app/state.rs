@@ -1,9 +1,18 @@
 use crate::audio::types::{PlaybackState, SpectrumData};
-use crate::models::{Category, PlayHistoryEntry, Playlist, Track};
+use crate::models::{PlayHistoryEntry, Playlist, Track};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LoadingKind {
+    Search,
+    Buffering,
+    Thumbnails,
+    Playlist,
+}
 
 #[derive(Debug, Clone)]
 pub struct LoadingProgress {
     pub active: bool,
+    pub kind: LoadingKind,
     pub message: String,
     pub progress: f64, // 0.0..1.0, negative means indeterminate
     pub total: usize,
@@ -22,8 +31,8 @@ pub enum Focus {
 pub enum NavSection {
     Search,
     Playlists,
-    Categories,
     History,
+    Settings,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +41,7 @@ pub enum ContentView {
     PlaylistTracks(i64),
     CategoryPlaylists(i64),
     HistoryList,
+    Settings,
     Empty,
 }
 
@@ -40,6 +50,73 @@ pub enum RepeatMode {
     Off,
     One,
     All,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EqStyle {
+    Bars,
+    Blocks,
+    Peaks,
+    Mirror,
+    Wave,
+}
+
+impl EqStyle {
+    pub const ALL: [EqStyle; 5] = [
+        EqStyle::Bars,
+        EqStyle::Blocks,
+        EqStyle::Peaks,
+        EqStyle::Mirror,
+        EqStyle::Wave,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            EqStyle::Bars => "Bars",
+            EqStyle::Blocks => "Blocks",
+            EqStyle::Peaks => "Peaks",
+            EqStyle::Mirror => "Mirror",
+            EqStyle::Wave => "Wave",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        let idx = EqStyle::ALL.iter().position(|&s| s == self).unwrap_or(0);
+        EqStyle::ALL[(idx + 1) % EqStyle::ALL.len()]
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Preferences {
+    pub auto_resume: bool,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            auto_resume: true,
+        }
+    }
+}
+
+impl Preferences {
+    pub const KEYS: &'static [(&'static str, &'static str)] = &[
+        ("auto_resume", "Resume playback on startup"),
+    ];
+
+    pub fn get(&self, key: &str) -> bool {
+        match key {
+            "auto_resume" => self.auto_resume,
+            _ => false,
+        }
+    }
+
+    pub fn toggle(&mut self, key: &str) {
+        match key {
+            "auto_resume" => self.auto_resume = !self.auto_resume,
+            _ => {}
+        }
+    }
 }
 
 pub struct AppState {
@@ -67,7 +144,6 @@ pub struct AppState {
 
     // Data
     pub playlists: Vec<Playlist>,
-    pub categories: Vec<Category>,
     pub history: Vec<PlayHistoryEntry>,
 
     // Nav panel sub-item index (e.g., which playlist is selected)
@@ -91,6 +167,21 @@ pub struct AppState {
 
     // Queue scroll offset for YouTube-style cards
     pub queue_scroll: usize,
+
+    // Theme selector (timer > 0 means visible)
+    pub theme_selector_timer: u8,
+
+    // EQ visualizer
+    pub eq_style: EqStyle,
+    pub eq_peaks: [f32; 64],
+    pub eq_selector_timer: u8,
+
+    // Preferences
+    pub preferences: Preferences,
+    pub settings_index: usize,
+
+    // Frame counter for animations
+    pub frame_count: usize,
 }
 
 impl Default for AppState {
@@ -115,10 +206,10 @@ impl Default for AppState {
             queue: Vec::new(),
             queue_index: None,
             playlists: Vec::new(),
-            categories: Vec::new(),
             history: Vec::new(),
             loading: LoadingProgress {
                 active: false,
+                kind: LoadingKind::Search,
                 message: String::new(),
                 progress: -1.0,
                 total: 0,
@@ -130,6 +221,13 @@ impl Default for AppState {
             toast_message: None,
             toast_timer: 0,
             queue_scroll: 0,
+            theme_selector_timer: 0,
+            eq_style: EqStyle::Bars,
+            eq_peaks: [0.0; 64],
+            eq_selector_timer: 0,
+            preferences: Preferences::default(),
+            settings_index: 0,
+            frame_count: 0,
         }
     }
 }

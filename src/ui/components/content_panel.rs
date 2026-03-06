@@ -17,13 +17,13 @@ pub fn draw(
     thumb_protocol: &mut Option<ratatui_image::protocol::StatefulProtocol>,
 ) {
     let focused = state.focus == Focus::Queue;
-    let border_color = if focused { theme::BLUE } else { theme::SURFACE0 };
+    let border_color = if focused { theme::blue() } else { theme::surface1() };
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
-        .style(Style::default().bg(theme::BASE));
+        .style(Style::default().bg(theme::base()));
 
     match &state.content_view {
         ContentView::SearchResults => {
@@ -39,9 +39,9 @@ pub fn draw(
             let inner = block.inner(area);
             f.render_widget(block, area);
             let msg = Paragraph::new(Line::from(vec![
-                Span::styled(" press ", Style::default().fg(theme::OVERLAY0)),
-                Span::styled("/", Style::default().fg(theme::YELLOW).add_modifier(Modifier::BOLD)),
-                Span::styled(" to search", Style::default().fg(theme::OVERLAY0)),
+                Span::styled(" press ", Style::default().fg(theme::overlay0())),
+                Span::styled("/", Style::default().fg(theme::yellow()).add_modifier(Modifier::BOLD)),
+                Span::styled(" to search", Style::default().fg(theme::overlay0())),
             ]));
             f.render_widget(msg, inner);
         }
@@ -61,7 +61,7 @@ fn draw_search_view(
         f.render_widget(block, area);
         let msg = Paragraph::new(Line::from(Span::styled(
             " searching...",
-            Style::default().fg(theme::YELLOW),
+            Style::default().fg(theme::yellow()),
         )));
         f.render_widget(msg, inner);
         return;
@@ -77,7 +77,7 @@ fn draw_search_view(
         };
         let paragraph = Paragraph::new(Line::from(Span::styled(
             msg,
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::overlay0()),
         )));
         f.render_widget(paragraph, inner);
         return;
@@ -132,16 +132,16 @@ fn draw_track_list(
             let info = Paragraph::new(vec![
                 Line::from(Span::styled(
                     &track.title,
-                    Style::default().fg(theme::TEXT).add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme::text()).add_modifier(Modifier::BOLD),
                 )),
                 Line::from(Span::styled(
                     &track.artist,
-                    Style::default().fg(theme::SUBTEXT0),
+                    Style::default().fg(theme::subtext0()),
                 )),
                 Line::from(""),
                 Line::from(vec![
-                    Span::styled("dur ", Style::default().fg(theme::SURFACE2)),
-                    Span::styled(track.duration_display(), Style::default().fg(theme::SUBTEXT1)),
+                    Span::styled("dur ", Style::default().fg(theme::surface2())),
+                    Span::styled(track.duration_display(), Style::default().fg(theme::subtext1())),
                 ]),
             ]);
             f.render_widget(info, thumb_row[1]);
@@ -152,11 +152,11 @@ fn draw_track_list(
     let title_line = Paragraph::new(Line::from(vec![
         Span::styled(
             format!(" {query} "),
-            Style::default().fg(theme::SURFACE0).bg(theme::BLUE),
+            Style::default().fg(theme::surface0()).bg(theme::blue()),
         ),
         Span::styled(
             format!("  {} tracks", tracks.len()),
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::overlay0()),
         ),
     ]));
     f.render_widget(title_line, chunks[1]);
@@ -183,20 +183,20 @@ fn draw_track_list(
             let dur_style;
 
             if is_selected && focused {
-                num_style = Style::default().fg(theme::BLUE).add_modifier(Modifier::BOLD);
-                title_style = Style::default().fg(theme::TEXT).add_modifier(Modifier::BOLD);
-                artist_style = Style::default().fg(theme::SUBTEXT1);
-                dur_style = Style::default().fg(theme::SUBTEXT0);
+                num_style = Style::default().fg(theme::blue()).add_modifier(Modifier::BOLD);
+                title_style = Style::default().fg(theme::text()).add_modifier(Modifier::BOLD);
+                artist_style = Style::default().fg(theme::subtext1());
+                dur_style = Style::default().fg(theme::subtext0());
             } else if is_selected {
-                num_style = Style::default().fg(theme::OVERLAY1);
-                title_style = Style::default().fg(theme::SUBTEXT1);
-                artist_style = Style::default().fg(theme::OVERLAY0);
-                dur_style = Style::default().fg(theme::SURFACE2);
+                num_style = Style::default().fg(theme::overlay1());
+                title_style = Style::default().fg(theme::subtext1());
+                artist_style = Style::default().fg(theme::overlay0());
+                dur_style = Style::default().fg(theme::surface2());
             } else {
-                num_style = Style::default().fg(theme::SURFACE2);
-                title_style = Style::default().fg(theme::SUBTEXT0);
-                artist_style = Style::default().fg(theme::OVERLAY0);
-                dur_style = Style::default().fg(theme::SURFACE2);
+                num_style = Style::default().fg(theme::surface2());
+                title_style = Style::default().fg(theme::subtext0());
+                artist_style = Style::default().fg(theme::overlay0());
+                dur_style = Style::default().fg(theme::surface2());
             }
 
             let indicator = if is_selected && focused { ">" } else { " " };
@@ -230,7 +230,7 @@ fn draw_history_view(f: &mut Frame, area: Rect, state: &AppState, block: Block) 
     if state.history.is_empty() {
         let msg = Paragraph::new(Line::from(Span::styled(
             " no history",
-            Style::default().fg(theme::OVERLAY0),
+            Style::default().fg(theme::overlay0()),
         )));
         f.render_widget(msg, inner);
         return;
@@ -249,15 +249,15 @@ fn draw_history_view(f: &mut Frame, area: Rect, state: &AppState, block: Block) 
 
             if is_selected {
                 Row::new(vec![
-                    Cell::from(title.to_string()).style(Style::default().fg(theme::TEXT).add_modifier(Modifier::BOLD)),
-                    Cell::from(artist.to_string()).style(Style::default().fg(theme::SUBTEXT1)),
-                    Cell::from(ago).style(Style::default().fg(theme::OVERLAY0)),
+                    Cell::from(title.to_string()).style(Style::default().fg(theme::text()).add_modifier(Modifier::BOLD)),
+                    Cell::from(artist.to_string()).style(Style::default().fg(theme::subtext1())),
+                    Cell::from(ago).style(Style::default().fg(theme::overlay0())),
                 ])
             } else {
                 Row::new(vec![
-                    Cell::from(title.to_string()).style(Style::default().fg(theme::SUBTEXT0)),
-                    Cell::from(artist.to_string()).style(Style::default().fg(theme::OVERLAY0)),
-                    Cell::from(ago).style(Style::default().fg(theme::SURFACE2)),
+                    Cell::from(title.to_string()).style(Style::default().fg(theme::subtext0())),
+                    Cell::from(artist.to_string()).style(Style::default().fg(theme::overlay0())),
+                    Cell::from(ago).style(Style::default().fg(theme::surface2())),
                 ])
             }
         })

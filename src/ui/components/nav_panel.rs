@@ -11,19 +11,21 @@ use crate::ui::theme;
 
 pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
     let focused = state.focus == Focus::Navigation;
-    let border_color = if focused { theme::MAUVE } else { theme::SURFACE0 };
+    let border_color = if focused { theme::mauve() } else { theme::surface1() };
 
     let block = Block::default()
+        .title(" library ")
+        .title_style(Style::default().fg(theme::subtext0()))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
-        .style(Style::default().bg(theme::BASE));
+        .style(Style::default().bg(theme::base()));
 
     let sections = [
-        (NavSection::Search, "search", theme::YELLOW),
-        (NavSection::Playlists, "playlists", theme::BLUE),
-        (NavSection::Categories, "categories", theme::GREEN),
-        (NavSection::History, "history", theme::MAUVE),
+        (NavSection::Search, "search", theme::yellow()),
+        (NavSection::Playlists, "playlists", theme::blue()),
+        (NavSection::History, "history", theme::mauve()),
+        (NavSection::Settings, "settings", theme::teal()),
     ];
 
     let mut items: Vec<ListItem> = Vec::new();
@@ -37,7 +39,7 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
                 Span::styled(" ", Style::default().fg(*accent)),
                 Span::styled(
                     format!(" {label} "),
-                    Style::default().fg(theme::MANTLE).bg(*accent).add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme::mantle()).bg(*accent).add_modifier(Modifier::BOLD),
                 ),
             ])
         } else if is_active {
@@ -48,7 +50,7 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
         } else {
             Line::from(Span::styled(
                 format!("   {label}"),
-                Style::default().fg(theme::OVERLAY1),
+                Style::default().fg(theme::overlay1()),
             ))
         };
 
@@ -58,7 +60,7 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
     // Separator
     items.push(ListItem::new(Line::from(Span::styled(
         " ────────────",
-        Style::default().fg(theme::SURFACE1),
+        Style::default().fg(theme::surface1()),
     ))));
 
     // Playlist items
@@ -70,16 +72,16 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
 
             let line = if pl_selected {
                 Line::from(vec![
-                    Span::styled(" ", Style::default().fg(theme::BLUE)),
+                    Span::styled(" ", Style::default().fg(theme::blue())),
                     Span::styled(
                         format!(" {} ", playlist.name),
-                        Style::default().fg(theme::MANTLE).bg(theme::BLUE),
+                        Style::default().fg(theme::mantle()).bg(theme::blue()),
                     ),
                 ])
             } else {
                 Line::from(Span::styled(
                     format!("   {}", playlist.name),
-                    Style::default().fg(theme::SUBTEXT0),
+                    Style::default().fg(theme::subtext0()),
                 ))
             };
 

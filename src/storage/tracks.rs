@@ -32,6 +32,15 @@ pub fn track_from_row(row: &Row) -> rusqlite::Result<Track> {
     })
 }
 
+pub fn get_track_by_youtube_id(conn: &Connection, youtube_id: &str) -> anyhow::Result<Track> {
+    let track = conn.query_row(
+        &format!("SELECT {} FROM tracks WHERE youtube_id = ?1", track_columns("")),
+        [youtube_id],
+        |row| track_from_row(row),
+    )?;
+    Ok(track)
+}
+
 pub fn ensure_track(conn: &Connection, track: &Track) -> anyhow::Result<i64> {
     let insert_cols: Vec<_> = COLUMNS.iter().filter(|c| **c != "id").copied().collect();
     let placeholders: Vec<_> = (1..=insert_cols.len()).map(|i| format!("?{i}")).collect();

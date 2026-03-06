@@ -7,6 +7,7 @@ pub struct AppLayout {
     pub queue_panel: Rect,
     pub equalizer: Rect,
     pub progress_bar: Rect,
+    pub help_bar: Rect,
 }
 
 pub fn build_layout(area: Rect) -> AppLayout {
@@ -15,8 +16,9 @@ pub fn build_layout(area: Rect) -> AppLayout {
         .constraints([
             Constraint::Length(3),         // top bar
             Constraint::Min(12),           // middle panels
-            Constraint::Length(5),          // equalizer
+            Constraint::Length(8),          // equalizer
             Constraint::Length(1),          // progress bar
+            Constraint::Length(1),          // help bar
         ])
         .split(area);
 
@@ -36,5 +38,6 @@ pub fn build_layout(area: Rect) -> AppLayout {
         queue_panel: middle_chunks[2],
         equalizer: main_chunks[2],
         progress_bar: main_chunks[3],
+        help_bar: main_chunks[4],
     }
 }

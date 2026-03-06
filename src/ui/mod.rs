@@ -18,7 +18,7 @@ pub fn draw(
 
     // Background
     let bg = ratatui::widgets::Block::default()
-        .style(ratatui::style::Style::default().bg(theme::BASE));
+        .style(ratatui::style::Style::default().bg(theme::base()));
     f.render_widget(bg, f.area());
 
     // Top bar
@@ -38,15 +38,28 @@ pub fn draw(
         components::loading_bar::draw(f, app_layout.equalizer, &state.loading);
     } else {
         // Equalizer
-        components::equalizer::draw(f, app_layout.equalizer, &state.spectrum);
+        components::equalizer::draw(f, app_layout.equalizer, &state.spectrum, &state.eq_peaks, state.eq_style);
     }
 
     // Progress bar
-    components::progress_bar::draw(f, app_layout.progress_bar, &state.playback);
+    components::progress_bar::draw(f, app_layout.progress_bar, &state.playback, state.frame_count);
+
+    // Help bar
+    components::help_bar::draw(f, app_layout.help_bar);
 
     // Popups
     if state.show_playlist_popup {
         components::popup::draw_playlist_popup(f, state);
+    }
+
+    // Theme selector
+    if state.theme_selector_timer > 0 {
+        components::theme_selector::draw(f);
+    }
+
+    // EQ style selector
+    if state.eq_selector_timer > 0 {
+        components::eq_selector::draw(f, state.eq_style);
     }
 
     // Toast
@@ -68,8 +81,8 @@ fn draw_toast(f: &mut Frame, message: &str) {
     let toast = ratatui::widgets::Paragraph::new(ratatui::text::Span::styled(
         format!(" {message} "),
         ratatui::style::Style::default()
-            .fg(theme::MANTLE)
-            .bg(theme::SURFACE2),
+            .fg(theme::mantle())
+            .bg(theme::surface2()),
     ));
     f.render_widget(toast, toast_area);
 }

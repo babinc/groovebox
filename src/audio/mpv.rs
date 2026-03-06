@@ -184,4 +184,10 @@ impl MpvPlayer {
     pub async fn stop(&mut self) -> Result<()> {
         self.send_command(json!(["stop"])).await
     }
+
+    pub async fn quit(&mut self) -> Result<()> {
+        let _ = self.send_command(json!(["quit"])).await;
+        let _ = self._process.kill().await;
+        Ok(())
+    }
 }

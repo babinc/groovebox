@@ -15,15 +15,15 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(if focused { theme::YELLOW } else { theme::SURFACE0 }))
-        .style(Style::default().bg(theme::MANTLE));
+        .border_style(Style::default().fg(if focused { theme::yellow() } else { theme::surface1() }))
+        .style(Style::default().bg(theme::mantle()));
 
     let cursor = if focused { "_" } else { "" };
     let text = Line::from(vec![
-        Span::styled(" / ", Style::default().fg(theme::MANTLE).bg(theme::YELLOW)),
+        Span::styled(" / ", Style::default().fg(theme::mantle()).bg(theme::yellow())),
         Span::raw(" "),
-        Span::styled(&state.search_query, Style::default().fg(theme::TEXT)),
-        Span::styled(cursor, Style::default().fg(theme::TEXT).add_modifier(Modifier::SLOW_BLINK)),
+        Span::styled(&state.search_query, Style::default().fg(theme::text())),
+        Span::styled(cursor, Style::default().fg(theme::text()).add_modifier(Modifier::SLOW_BLINK)),
     ]);
 
     let paragraph = Paragraph::new(text).block(block);

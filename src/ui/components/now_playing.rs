@@ -17,13 +17,13 @@ pub fn draw(
     thumb_image: Option<&mut ratatui_image::protocol::StatefulProtocol>,
 ) {
     let focused = state.focus == Focus::Center;
-    let border_color = if focused { theme::GREEN } else { theme::SURFACE0 };
+    let border_color = if focused { theme::green() } else { theme::surface1() };
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
-        .style(Style::default().bg(theme::BASE));
+        .style(Style::default().bg(theme::base()));
 
     let display_track = state.playback.current_track.as_ref()
         .or(state.preview_track.as_ref());
@@ -36,12 +36,12 @@ pub fn draw(
             Line::from(""),
             Line::from(Span::styled(
                 "groovebox",
-                Style::default().fg(theme::SURFACE1).add_modifier(Modifier::BOLD),
+                Style::default().fg(theme::surface1()).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(Span::styled(
                 "press / to search  |  tab to navigate",
-                Style::default().fg(theme::SURFACE2),
+                Style::default().fg(theme::surface2()),
             )),
         ])
         .alignment(Alignment::Center);
@@ -95,26 +95,26 @@ pub fn draw(
     };
 
     let status_color = match state.playback.status {
-        PlayStatus::Playing => theme::GREEN,
-        PlayStatus::Paused => theme::YELLOW,
-        _ => theme::SURFACE2,
+        PlayStatus::Playing => theme::green(),
+        PlayStatus::Paused => theme::yellow(),
+        _ => theme::surface2(),
     };
 
     let mut info_lines = vec![
         Line::from(Span::styled(
             &track.title,
-            Style::default().fg(theme::TEXT).add_modifier(Modifier::BOLD),
+            Style::default().fg(theme::text()).add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::styled(
             &track.artist,
-            Style::default().fg(theme::SUBTEXT0),
+            Style::default().fg(theme::subtext0()),
         )),
     ];
 
     if !status.is_empty() {
         info_lines.push(Line::from(Span::styled(
             status,
-            Style::default().fg(theme::MANTLE).bg(status_color),
+            Style::default().fg(theme::mantle()).bg(status_color),
         )));
     }
 
@@ -124,7 +124,7 @@ pub fn draw(
     // Separator
     let sep = Paragraph::new(Line::from(Span::styled(
         "─".repeat(inner.width as usize),
-        Style::default().fg(theme::SURFACE1),
+        Style::default().fg(theme::surface1()),
     )));
     f.render_widget(sep, chunks[3]);
 
@@ -155,8 +155,8 @@ fn draw_nerd_facts(f: &mut Frame, area: Rect, state: &AppState) {
     // Render as a compact centered block
     for (label, value) in facts {
         lines.push(Line::from(vec![
-            Span::styled(format!("  {label:<9} "), Style::default().fg(theme::SURFACE2)),
-            Span::styled(value, Style::default().fg(theme::SUBTEXT0)),
+            Span::styled(format!("  {label:<9} "), Style::default().fg(theme::surface2())),
+            Span::styled(value, Style::default().fg(theme::subtext0())),
         ]));
     }
 

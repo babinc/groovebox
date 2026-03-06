@@ -47,15 +47,15 @@ pub enum PlayerCommand {
     Volume(f64),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct SpectrumData {
-    pub bins: Vec<f32>,
+    pub bins: [f32; 64],
 }
 
 impl Default for SpectrumData {
     fn default() -> Self {
         Self {
-            bins: vec![0.0; 32],
+            bins: [0.0; 64],
         }
     }
 }

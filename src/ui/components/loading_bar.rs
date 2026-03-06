@@ -28,7 +28,7 @@ pub fn draw(f: &mut Frame, area: Rect, loading: &LoadingProgress) {
     let msg_area = Rect { height: 1, ..bar_area };
     let msg = Paragraph::new(Line::from(Span::styled(
         &loading.message,
-        Style::default().fg(theme::SUBTEXT0),
+        Style::default().fg(theme::subtext0()),
     )))
     .alignment(ratatui::layout::Alignment::Center);
     f.render_widget(msg, msg_area);
@@ -54,17 +54,17 @@ pub fn draw(f: &mut Frame, area: Rect, loading: &LoadingProgress) {
         if start > 0 {
             spans.push(Span::styled(
                 "─".repeat(start),
-                Style::default().fg(theme::SURFACE1),
+                Style::default().fg(theme::surface1()),
             ));
         }
         spans.push(Span::styled(
             "━".repeat(end - start),
-            Style::default().fg(theme::MAUVE),
+            Style::default().fg(theme::mauve()),
         ));
         if end < inner_width {
             spans.push(Span::styled(
                 "─".repeat(inner_width - end),
-                Style::default().fg(theme::SURFACE1),
+                Style::default().fg(theme::surface1()),
             ));
         }
 
@@ -79,13 +79,13 @@ pub fn draw(f: &mut Frame, area: Rect, loading: &LoadingProgress) {
         if filled > 0 {
             spans.push(Span::styled(
                 "━".repeat(filled),
-                Style::default().fg(theme::GREEN),
+                Style::default().fg(theme::green()),
             ));
         }
         if filled < inner_width {
             spans.push(Span::styled(
                 "─".repeat(inner_width - filled),
-                Style::default().fg(theme::SURFACE1),
+                Style::default().fg(theme::surface1()),
             ));
         }
 

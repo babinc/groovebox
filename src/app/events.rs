@@ -1,7 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::state::{AppState, ContentView, Focus, NavSection, RepeatMode};
+use super::state::{AppState, ContentView, Focus, NavSection, Preferences, RepeatMode};
 
+#[derive(Debug)]
 pub enum AppAction {
     None,
     Quit,
@@ -20,6 +21,9 @@ pub enum AppAction {
     LoadPlaylists,
     LoadHistory,
     LoadPlaylistTracks(i64),
+    CycleTheme,
+    CycleEq,
+    ToggleSetting(usize),
 }
 
 pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
@@ -90,6 +94,8 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
             state.toast_timer = 30;
             AppAction::None
         }
+        KeyCode::Char('t') => AppAction::CycleTheme,
+        KeyCode::Char('e') => AppAction::CycleEq,
         KeyCode::Char('r') => {
             state.repeat = match state.repeat {
                 RepeatMode::Off => RepeatMode::One,
@@ -118,7 +124,7 @@ fn handle_panel_key(state: &mut AppState, key: KeyEvent) -> AppAction {
 }
 
 fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
-    let sections = [NavSection::Search, NavSection::Playlists, NavSection::Categories, NavSection::History];
+    let sections = [NavSection::Search, NavSection::Playlists, NavSection::History, NavSection::Settings];
     let section_idx = sections.iter().position(|s| *s == state.nav_section).unwrap_or(0);
 
     match key.code {
@@ -168,6 +174,13 @@ fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
                             return AppAction::LoadPlaylistTracks(id);
                         }
                     }
+                    // No playlists yet — show empty playlist view
+                    state.content_view = ContentView::SearchResults;
+                    state.search_results.clear();
+                    state.queue.clear();
+                    state.content_index = 0;
+                    state.toast_message = Some("No playlists yet — play a track and press 'a' to create one".into());
+                    state.toast_timer = 60;
                     return AppAction::LoadPlaylists;
                 }
                 NavSection::History => {
@@ -175,7 +188,11 @@ fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
                     state.content_index = 0;
                     return AppAction::LoadHistory;
                 }
-                NavSection::Categories => {}
+                NavSection::Settings => {
+                    state.content_view = ContentView::Settings;
+                    state.settings_index = 0;
+                    state.focus = Focus::Queue;
+                }
             }
             AppAction::None
         }
@@ -184,10 +201,33 @@ fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
 }
 
 fn handle_queue_key(state: &mut AppState, key: KeyEvent) -> AppAction {
+    // Settings view has its own navigation
+    if state.content_view == ContentView::Settings {
+        let num_settings = Preferences::KEYS.len();
+        return match key.code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                if num_settings > 0 {
+                    state.settings_index = (state.settings_index + 1).min(num_settings - 1);
+                }
+                AppAction::None
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if state.settings_index > 0 {
+                    state.settings_index -= 1;
+                }
+                AppAction::None
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                AppAction::ToggleSetting(state.settings_index)
+            }
+            _ => AppAction::None,
+        };
+    }
+
     let list_len = match &state.content_view {
         ContentView::SearchResults => state.search_results.len(),
         ContentView::PlaylistTracks(_) => state.search_results.len(),
-        ContentView::HistoryList => state.history.len(),
+        ContentView::HistoryList => state.search_results.len(),
         _ => 0,
     };
 

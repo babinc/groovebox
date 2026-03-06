@@ -3,7 +3,7 @@ use tokio::sync::watch;
 
 use super::types::SpectrumData;
 
-const NUM_BINS: usize = 32;
+const NUM_BINS: usize = 64;
 const FFT_SIZE: usize = 2048;
 const SAMPLE_RATE: f32 = 44100.0;
 
@@ -69,7 +69,9 @@ fn run_parec_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Bo
 
     let mut planner = FftPlanner::<f32>::new();
     let fft = planner.plan_fft_forward(FFT_SIZE);
-    let mut prev_bins = vec![0.0f32; NUM_BINS];
+    let mut prev_bins = [0.0f32; NUM_BINS];
+    let mut fft_input = vec![Complex::new(0.0f32, 0.0); FFT_SIZE];
+    let mut bins = [0.0f32; NUM_BINS];
     let mut sample_buf: Vec<f32> = Vec::with_capacity(FFT_SIZE * 2);
     let mut raw_buf = [0u8; 4 * 1024]; // Read in chunks (1024 float32 samples)
 
@@ -111,26 +113,33 @@ fn run_parec_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Bo
             continue;
         }
 
-        // Apply Hann window
+        // Apply Hann window (reuse pre-allocated buffer)
         let samples = &sample_buf[sample_buf.len() - FFT_SIZE..];
-        let mut fft_input: Vec<Complex<f32>> = samples
-            .iter()
-            .enumerate()
-            .map(|(i, &s)| {
-                let window = 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / FFT_SIZE as f32).cos());
-                Complex::new(s * window, 0.0)
-            })
-            .collect();
+        for (i, &s) in samples.iter().enumerate() {
+            let window = 0.5 * (1.0 - (2.0 * std::f32::consts::PI * i as f32 / FFT_SIZE as f32).cos());
+            fft_input[i] = Complex::new(s * window, 0.0);
+        }
 
         fft.process(&mut fft_input);
 
-        // Bin into log-scale frequency bands
-        let mut bins = vec![0.0f32; NUM_BINS];
+        // Bin into frequency bands using a sqrt-log scale that spreads
+        // energy more evenly across the visual range. Pure log scale
+        // puts too much weight on bass; this blend gives the high-mids
+        // and highs more representation.
+        bins.fill(0.0);
         let nyquist = FFT_SIZE / 2;
 
+        let f_min: f32 = 30.0;
+        let f_max: f32 = 14000.0;
+
         for bin_idx in 0..NUM_BINS {
-            let freq_low = 20.0 * (20000.0 / 20.0_f32).powf(bin_idx as f32 / NUM_BINS as f32);
-            let freq_high = 20.0 * (20000.0 / 20.0_f32).powf((bin_idx + 1) as f32 / NUM_BINS as f32);
+            let t0 = bin_idx as f32 / NUM_BINS as f32;
+            let t1 = (bin_idx + 1) as f32 / NUM_BINS as f32;
+
+            // Blend between log and linear: sqrt of the log ratio
+            // This compresses the bass range and expands the mids/highs
+            let freq_low = f_min + (f_max - f_min) * (t0 * t0.sqrt());
+            let freq_high = f_min + (f_max - f_min) * (t1 * t1.sqrt());
 
             let idx_low = (freq_low * FFT_SIZE as f32 / SAMPLE_RATE).round() as usize;
             let idx_high = (freq_high * FFT_SIZE as f32 / SAMPLE_RATE).round() as usize;
@@ -144,7 +153,12 @@ fn run_parec_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Bo
                 let mag = fft_input[i].norm();
                 sum += mag;
             }
-            bins[bin_idx] = sum / count as f32;
+            let avg = sum / count as f32;
+
+            // Apply frequency-dependent gain: boost higher frequencies
+            // that naturally have less energy in music
+            let gain = 1.0 + t0 * 2.0; // 1x at bass, 3x at treble
+            bins[bin_idx] = avg * gain;
         }
 
         // Normalize to 0.0-1.0 range
@@ -162,7 +176,7 @@ fn run_parec_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Bo
             };
         }
 
-        let _ = spectrum_tx.send(SpectrumData { bins: prev_bins.clone() });
+        let _ = spectrum_tx.send(SpectrumData { bins: prev_bins });
     }
 
     let _ = child.kill();

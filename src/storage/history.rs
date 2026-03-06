@@ -51,3 +51,18 @@ pub fn get_track_by_id(conn: &Connection, track_id: i64) -> Result<Track> {
     )?;
     Ok(track)
 }
+
+/// Get full Track objects for recent history in a single query (no N+1).
+pub fn get_history_tracks(conn: &Connection, limit: usize) -> Result<Vec<Track>> {
+    let mut stmt = conn.prepare(
+        &format!(
+            "SELECT {} FROM tracks t
+             JOIN play_history h ON t.id = h.track_id
+             ORDER BY h.played_at DESC
+             LIMIT ?1",
+            tracks::track_columns("t")
+        ),
+    )?;
+    let rows = stmt.query_map([limit as i64], |row| track_from_row(row))?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}

@@ -8,7 +8,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
 };
 
-use crate::app::state::{AppState, ContentView, Focus};
+use crate::app::state::{AppState, ContentView, Focus, Preferences};
 use crate::models::Track;
 use crate::ui::theme;
 
@@ -21,13 +21,13 @@ pub fn draw(
     thumb_cache: &mut HashMap<String, ratatui_image::protocol::StatefulProtocol>,
 ) {
     let focused = state.focus == Focus::Queue;
-    let border_color = if focused { theme::BLUE } else { theme::SURFACE0 };
+    let border_color = if focused { theme::blue() } else { theme::surface1() };
 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
-        .style(Style::default().bg(theme::BASE));
+        .style(Style::default().bg(theme::base()));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -50,11 +50,11 @@ pub fn draw(
                 Line::from(vec![
                     Span::styled(
                         format!(" {} ", state.search_query),
-                        Style::default().fg(theme::MANTLE).bg(theme::BLUE),
+                        Style::default().fg(theme::mantle()).bg(theme::blue()),
                     ),
                     Span::styled(
                         format!(" {} results", state.search_results.len()),
-                        Style::default().fg(theme::SURFACE2),
+                        Style::default().fg(theme::surface2()),
                     ),
                 ])
             }
@@ -66,24 +66,30 @@ pub fn draw(
                 Line::from(vec![
                     Span::styled(
                         format!(" {name} "),
-                        Style::default().fg(theme::MANTLE).bg(theme::BLUE),
+                        Style::default().fg(theme::mantle()).bg(theme::blue()),
                     ),
                     Span::styled(
                         format!(" {} tracks", state.search_results.len()),
-                        Style::default().fg(theme::SURFACE2),
+                        Style::default().fg(theme::surface2()),
                     ),
                 ])
             }
             ContentView::HistoryList => {
                 Line::from(Span::styled(
                     " history ",
-                    Style::default().fg(theme::MANTLE).bg(theme::MAUVE),
+                    Style::default().fg(theme::mantle()).bg(theme::mauve()),
+                ))
+            }
+            ContentView::Settings => {
+                Line::from(Span::styled(
+                    " settings ",
+                    Style::default().fg(theme::mantle()).bg(theme::teal()),
                 ))
             }
             _ => {
                 Line::from(Span::styled(
                     " press / to search",
-                    Style::default().fg(theme::OVERLAY0),
+                    Style::default().fg(theme::overlay0()),
                 ))
             }
         };
@@ -95,12 +101,18 @@ pub fn draw(
         super::search_input::draw(f, sa, state);
     }
 
+    // Settings view
+    if state.content_view == ContentView::Settings {
+        draw_settings(f, list_area, state, focused);
+        return;
+    }
+
     let tracks = &state.search_results;
     if tracks.is_empty() {
         if state.searching {
             let msg = Paragraph::new(Line::from(Span::styled(
                 " searching...",
-                Style::default().fg(theme::YELLOW),
+                Style::default().fg(theme::yellow()),
             )));
             f.render_widget(msg, list_area);
         }
@@ -155,13 +167,13 @@ fn draw_track_card(
     let accent_color;
     if is_playing {
         accent_char = "▌";
-        accent_color = theme::GREEN;
+        accent_color = theme::green();
     } else if is_selected && focused {
         accent_char = "▌";
-        accent_color = theme::BLUE;
+        accent_color = theme::blue();
     } else {
         accent_char = " ";
-        accent_color = theme::BASE;
+        accent_color = theme::base();
     }
 
     // Draw accent bar on first column
@@ -199,9 +211,9 @@ fn draw_track_card(
         f.render_stateful_widget(image, chunks[0], protocol);
     } else {
         let placeholder = Paragraph::new(vec![
-            Line::from(Span::styled("  ┌──────┐", Style::default().fg(theme::SURFACE1))),
-            Line::from(Span::styled("  │      │", Style::default().fg(theme::SURFACE1))),
-            Line::from(Span::styled("  └──────┘", Style::default().fg(theme::SURFACE1))),
+            Line::from(Span::styled("  ┌──────┐", Style::default().fg(theme::surface1()))),
+            Line::from(Span::styled("  │      │", Style::default().fg(theme::surface1()))),
+            Line::from(Span::styled("  └──────┘", Style::default().fg(theme::surface1()))),
         ]);
         f.render_widget(placeholder, chunks[0]);
     }
@@ -217,25 +229,25 @@ fn draw_track_card(
     };
 
     let num_style = if is_playing {
-        Style::default().fg(theme::GREEN).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme::green()).add_modifier(Modifier::BOLD)
     } else if is_selected && focused {
-        Style::default().fg(theme::BLUE).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme::blue()).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(theme::SURFACE2)
+        Style::default().fg(theme::surface2())
     };
 
     let title_style = if is_playing {
-        Style::default().fg(theme::GREEN).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme::green()).add_modifier(Modifier::BOLD)
     } else if is_selected && focused {
-        Style::default().fg(theme::TEXT).add_modifier(Modifier::BOLD)
+        Style::default().fg(theme::text()).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(theme::SUBTEXT0)
+        Style::default().fg(theme::subtext0())
     };
 
     let artist_style = if is_selected && focused {
-        Style::default().fg(theme::SUBTEXT1)
+        Style::default().fg(theme::subtext1())
     } else {
-        Style::default().fg(theme::OVERLAY0)
+        Style::default().fg(theme::overlay0())
     };
 
     let playing_indicator = if is_playing { " " } else { "" };
@@ -243,7 +255,7 @@ fn draw_track_card(
     let lines = vec![
         Line::from(vec![
             Span::styled(format!("{:>2} ", index + 1), num_style),
-            Span::styled(playing_indicator, Style::default().fg(theme::GREEN)),
+            Span::styled(playing_indicator, Style::default().fg(theme::green())),
             Span::styled(title_display, title_style),
         ]),
         Line::from(vec![
@@ -252,7 +264,7 @@ fn draw_track_card(
         ]),
         Line::from(vec![
             Span::styled("   ", Style::default()),
-            Span::styled(track.duration_display(), Style::default().fg(theme::SURFACE2)),
+            Span::styled(track.duration_display(), Style::default().fg(theme::surface2())),
         ]),
     ];
 
@@ -270,8 +282,64 @@ fn draw_track_card(
         };
         let sep = Paragraph::new(Line::from(Span::styled(
             "─".repeat(sep_area.width as usize),
-            Style::default().fg(theme::SURFACE0),
+            Style::default().fg(theme::surface0()),
         )));
         f.render_widget(sep, sep_area);
+    }
+}
+
+fn draw_settings(f: &mut Frame, area: Rect, state: &AppState, focused: bool) {
+    let settings = Preferences::KEYS;
+
+    for (i, &(key, label)) in settings.iter().enumerate() {
+        if i as u16 * 2 >= area.height { break; }
+
+        let row = Rect {
+            x: area.x,
+            y: area.y + i as u16 * 2,
+            width: area.width,
+            height: 2,
+        };
+
+        let is_selected = i == state.settings_index && focused;
+        let enabled = state.preferences.get(key);
+
+        let toggle = if enabled {
+            Span::styled(" ON  ", Style::default().fg(theme::mantle()).bg(theme::green()))
+        } else {
+            Span::styled(" OFF ", Style::default().fg(theme::mantle()).bg(theme::surface2()))
+        };
+
+        let label_style = if is_selected {
+            Style::default().fg(theme::text()).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme::subtext0())
+        };
+
+        let marker = if is_selected { "▌ " } else { "  " };
+        let marker_style = if is_selected {
+            Style::default().fg(theme::blue())
+        } else {
+            Style::default()
+        };
+
+        let line = Line::from(vec![
+            Span::styled(marker, marker_style),
+            toggle,
+            Span::raw("  "),
+            Span::styled(label, label_style),
+        ]);
+
+        f.render_widget(Paragraph::new(line), row);
+    }
+
+    // Help text at bottom
+    if area.height > (settings.len() as u16 * 2) + 2 {
+        let help_y = area.y + settings.len() as u16 * 2 + 1;
+        let help = Paragraph::new(Line::from(vec![
+            Span::styled(" Enter ", Style::default().fg(theme::overlay1()).bg(theme::surface0())),
+            Span::styled(" toggle", Style::default().fg(theme::overlay0())),
+        ]));
+        f.render_widget(help, Rect { x: area.x + 1, y: help_y, width: area.width.saturating_sub(1), height: 1 });
     }
 }
