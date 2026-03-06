@@ -19,8 +19,6 @@ pub struct Track {
 
 impl Track {
     pub fn duration_display(&self) -> String {
-        let mins = self.duration as u64 / 60;
-        let secs = self.duration as u64 % 60;
-        format!("{mins}:{secs:02}")
+        crate::ui::components::progress_bar::format_time(self.duration)
     }
 }

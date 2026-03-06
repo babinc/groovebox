@@ -144,7 +144,6 @@ pub struct AppState {
     pub running: bool,
     pub focus: Focus,
     pub nav_section: NavSection,
-    pub nav_index: usize,
     pub content_view: ContentView,
     pub content_index: usize,
 
@@ -210,6 +209,10 @@ pub struct AppState {
 
     // Guard against duplicate fetch_related spawns
     pub fetching_related: bool,
+
+    // Cached parsed chapters from current track's description
+    pub cached_chapters: Vec<crate::youtube::chapters::Chapter>,
+    pub cached_chapters_track_id: String,
 }
 
 impl Default for AppState {
@@ -218,7 +221,6 @@ impl Default for AppState {
             running: true,
             focus: Focus::Navigation,
             nav_section: NavSection::Search,
-            nav_index: 0,
             content_view: ContentView::Empty,
             content_index: 0,
             search_query: String::new(),
@@ -259,6 +261,8 @@ impl Default for AppState {
             seek_streak: 0,
             last_seek_frame: 0,
             fetching_related: false,
+            cached_chapters: Vec::new(),
+            cached_chapters_track_id: String::new(),
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::models::Track;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PlayStatus {
     Stopped,
     Playing,

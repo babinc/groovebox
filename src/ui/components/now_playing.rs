@@ -79,11 +79,8 @@ pub fn draw(
     let has_desc = track.description.as_ref().map_or(false, |d| !d.is_empty());
     let show_desc = h >= 24 && has_desc;
 
-    // Parse chapters from description
-    let parsed_chapters = track.description.as_deref()
-        .map(chapters::parse_chapters)
-        .unwrap_or_default();
-    let has_chapter = !parsed_chapters.is_empty() && show_elapsed;
+    // Use cached chapters (parsed once when track changes, not every frame)
+    let has_chapter = !state.cached_chapters.is_empty() && show_elapsed;
 
     // Calculate fixed section heights, give remainder to thumbnail
     let mut fixed_height: u16 = 1 + 3; // spacer + info (always present)
@@ -191,7 +188,7 @@ pub fn draw(
 
     // Current chapter
     if let Some(i) = idx("chapter") {
-        if let Some(ch) = chapters::current_chapter(&parsed_chapters, state.playback.position) {
+        if let Some(ch) = chapters::current_chapter(&state.cached_chapters, state.playback.position) {
             draw_chapter(f, chunks[i], ch);
         }
     }
@@ -396,15 +393,17 @@ fn draw_description(f: &mut Frame, area: Rect, track: &crate::models::Track, fra
         1
     };
 
-    // Scroll with wrapping — loop back to top when past the end
+    // Scroll down slowly, pause at bottom, then loop back to top
     let max_scroll = total_lines.saturating_sub(padded.height);
     let scroll_offset = if max_scroll > 0 {
-        ((frame_count / 90) as u16) % (max_scroll + padded.height)
+        // Add extra "pause" frames at top and bottom
+        let pause = padded.height as u16; // pause for ~1 screen worth of frames
+        let cycle = max_scroll + pause;
+        let pos = ((frame_count / 90) as u16) % cycle;
+        pos.min(max_scroll)
     } else {
         0
     };
-    // Clamp so we don't scroll past content into blank space
-    let scroll_offset = scroll_offset.min(max_scroll);
 
     let p = Paragraph::new(desc)
         .style(Style::default().fg(theme::overlay1()))

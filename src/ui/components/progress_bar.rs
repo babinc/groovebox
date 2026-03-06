@@ -108,7 +108,12 @@ fn draw_buffering(f: &mut Frame, area: Rect, width: usize, frame_count: usize) {
 
 pub fn format_time(seconds: f64) -> String {
     let total = seconds as u64;
-    let mins = total / 60;
+    let hours = total / 3600;
+    let mins = (total % 3600) / 60;
     let secs = total % 60;
-    format!("{mins:02}:{secs:02}")
+    if hours > 0 {
+        format!("{hours}:{mins:02}:{secs:02}")
+    } else {
+        format!("{mins:02}:{secs:02}")
+    }
 }

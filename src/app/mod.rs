@@ -181,6 +181,14 @@ impl App {
         // Auto-resume playback from last session
         if let Some((ref track, position)) = self.auto_resume.take() {
             log(&format!("RESUME: playing '{}' at queue[0], seeking to {position:.1}s", track.title));
+            // Pre-fetch related tracks using artist+title search (more relevant than YouTube Mix)
+            let query = format!("{} {}", track.artist, track.title);
+            let tx = self.bg_tx.clone();
+            self.state.fetching_related = true;
+            tokio::spawn(async move {
+                let result = search::search_youtube(&query, 20).await;
+                let _ = tx.send(BgResult::RelatedReady(result)).await;
+            });
             self.play_track_at_index(0);
             self.resume_seek = if position > 5.0 { Some(position - 2.0) } else { None };
         }
@@ -213,6 +221,7 @@ impl App {
                 while let Ok(pb_state) = rx.try_recv() {
                     let track = self.state.playback.current_track.clone();
                     let volume = self.state.playback.volume;
+                    let prev_status = self.state.playback.status;
                     // Don't let mpv's end-file event overwrite Buffering with Stopped
                     // during loading — that would trigger a false auto-next
                     let ignore_stopped = is_loading
@@ -220,13 +229,15 @@ impl App {
                     self.state.playback = pb_state;
                     self.state.playback.current_track = track;
                     if ignore_stopped {
-                        log(&format!("MPV: ignoring Stopped (is_loading=true), keeping Buffering"));
                         self.state.playback.status = PlayStatus::Buffering;
-                    } else if self.state.playback.status == PlayStatus::Stopped {
-                        log(&format!("MPV: status -> Stopped (queue_index={:?}, loading={}, pending={})",
-                            self.state.queue_index, self.state.loading.active, self.pending_play.is_some()));
-                    } else if self.state.playback.status == PlayStatus::Playing {
-                        log("MPV: status -> Playing");
+                    }
+                    // Only log status transitions, not every frame
+                    if self.state.playback.status != prev_status {
+                        if ignore_stopped {
+                            log("MPV: ignoring Stopped (is_loading=true), keeping Buffering");
+                        } else {
+                            log(&format!("MPV: status -> {:?}", self.state.playback.status));
+                        }
                     }
                     if (self.state.playback.volume - volume).abs() > 0.5 {
                         self.state.playback.volume = volume;
@@ -378,7 +389,9 @@ impl App {
                         self.replace_queue(results);
                     }
                     Err(e) => {
-                        self.state.toast_message = Some(format!("Search error: {e}"));
+                        let msg = format!("Search error: {e}");
+                        log(&format!("TOAST: {msg}"));
+                        self.state.toast_message = Some(msg);
                         self.state.toast_timer = 60;
                     }
                 }
@@ -432,7 +445,9 @@ impl App {
                         self.state.loading.active = false;
                         self.state.playback.status = PlayStatus::Stopped;
                         self.state.queue_index = None; // prevent auto-next from advancing
-                        self.state.toast_message = Some(format!("URL error: {e}"));
+                        let msg = format!("URL error: {e}");
+                        log(&format!("TOAST: {msg}"));
+                        self.state.toast_message = Some(msg);
                         self.state.toast_timer = 60;
                         fft::set_fft_active(false);
                     }
@@ -446,7 +461,14 @@ impl App {
                         if full_track.sample_rate.is_some() { current.sample_rate = full_track.sample_rate; }
                         if full_track.channels.is_some() { current.channels = full_track.channels; }
                         if full_track.filesize.is_some() { current.filesize = full_track.filesize; }
-                        if full_track.description.is_some() { current.description = full_track.description; }
+                        if full_track.description.is_some() {
+                            // Cache parsed chapters when description arrives
+                            self.state.cached_chapters = full_track.description.as_deref()
+                                .map(crate::youtube::chapters::parse_chapters)
+                                .unwrap_or_default();
+                            self.state.cached_chapters_track_id = current.youtube_id.clone();
+                            current.description = full_track.description;
+                        }
                     }
                 }
             }
@@ -570,6 +592,7 @@ impl App {
                         }
                     }
                     Err(e) => {
+                        log(&format!("TOAST: Playlist error: {e}"));
                         self.state.toast_message = Some(format!("Error: {e}"));
                         self.state.toast_timer = 40;
                     }
@@ -697,7 +720,9 @@ impl App {
     async fn process_pending_play(&mut self) {
         if let Some((track, audio_url)) = self.pending_play.take() {
             if let Err(e) = self.ensure_mpv().await {
-                self.state.toast_message = Some(format!("mpv error: {e}"));
+                let msg = format!("mpv error: {e}");
+                log(&format!("TOAST: {msg}"));
+                self.state.toast_message = Some(msg);
                 self.state.toast_timer = 60;
                 self.state.loading.active = false;
                 self.state.playback.status = PlayStatus::Stopped;
@@ -706,7 +731,9 @@ impl App {
 
             if let Some(ref mut mpv) = self.mpv {
                 if let Err(e) = mpv.load_file(&audio_url).await {
-                    self.state.toast_message = Some(format!("Play error: {e}"));
+                    let msg = format!("Play error: {e}");
+                    log(&format!("TOAST: {msg}"));
+                    self.state.toast_message = Some(msg);
                     self.state.toast_timer = 60;
                     self.state.loading.active = false;
                     self.state.playback.status = PlayStatus::Stopped;
@@ -796,8 +823,9 @@ impl App {
 
     /// Replace the queue and search results with new tracks, resetting navigation state.
     fn replace_queue(&mut self, tracks: Vec<Track>) {
-        self.state.queue = tracks.clone();
-        self.state.search_results = tracks;
+        self.thumb_cache.clear(); // evict stale thumbnail protocols
+        self.state.search_results = tracks.clone();
+        self.state.queue = tracks;
         self.state.content_index = 0;
         self.state.last_preview_index = None;
         if self.state.playback.status == PlayStatus::Stopped {
