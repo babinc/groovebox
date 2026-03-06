@@ -194,12 +194,26 @@ impl App {
         if let Some((ref track, position)) = self.auto_resume.take() {
             log(&format!("RESUME: playing '{}' at queue[0], seeking to {position:.1}s", track.title));
             // Pre-fetch related tracks using artist+title search (more relevant than YouTube Mix)
-            let query = format!("{} {}", track.artist, track.title);
+            // Strip emojis and special chars so yt-dlp search actually finds results
+            let query: String = format!("{} {}", track.artist, track.title)
+                .chars()
+                .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '-' || *c == '&')
+                .collect::<String>()
+                .split_whitespace()
+                .collect::<Vec<&str>>()
+                .join(" ");
             let tx = self.bg_tx.clone();
+            let url = track.youtube_url.clone();
             self.state.fetching_related = true;
             tokio::spawn(async move {
+                // Try search first, fall back to YouTube Mix if no results
                 let result = search::search_youtube(&query, 20).await;
-                let _ = tx.send(BgResult::RelatedReady(result)).await;
+                if result.as_ref().map_or(true, |t| t.is_empty()) {
+                    let fallback = search::fetch_related(&url, 20).await;
+                    let _ = tx.send(BgResult::RelatedReady(fallback)).await;
+                } else {
+                    let _ = tx.send(BgResult::RelatedReady(result)).await;
+                }
             });
             self.play_track_at_index(0);
             self.resume_seek = if position > 5.0 { Some(position - 2.0) } else { None };

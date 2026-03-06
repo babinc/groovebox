@@ -181,12 +181,7 @@ fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
                         state.content_index = 0;
                     }
                     state.content_view = ContentView::SearchResults;
-                    // If we have results, show them; otherwise open search input
-                    if state.search_results.is_empty() {
-                        state.focus = Focus::SearchInput;
-                    } else {
-                        state.focus = Focus::Queue;
-                    }
+                    state.focus = Focus::Queue;
                 }
                 NavSection::Playlists => {
                     if let Some(pl) = state.playlists.get(state.nav_sub_index) {
