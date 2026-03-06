@@ -423,3 +423,43 @@ pub fn truncate_str(s: &str, max_len: usize) -> String {
         s.chars().take(max_len).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_short_string_unchanged() {
+        assert_eq!(truncate_str("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_length_unchanged() {
+        assert_eq!(truncate_str("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_adds_ellipsis() {
+        assert_eq!(truncate_str("hello world", 8), "hello...");
+    }
+
+    #[test]
+    fn truncate_very_short_max_no_ellipsis() {
+        assert_eq!(truncate_str("hello", 3), "hel");
+    }
+
+    #[test]
+    fn truncate_zero_max() {
+        assert_eq!(truncate_str("hello", 0), "");
+    }
+
+    #[test]
+    fn truncate_unicode() {
+        assert_eq!(truncate_str("日本語テスト", 5), "日本...");
+    }
+
+    #[test]
+    fn truncate_emoji() {
+        assert_eq!(truncate_str("🎵🎶🎷🎸🎹🎺", 5), "🎵🎶...");
+    }
+}

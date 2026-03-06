@@ -16,7 +16,7 @@ pub fn open_database() -> Result<Connection> {
     Ok(conn)
 }
 
-fn migrate(conn: &Connection) -> Result<()> {
+pub fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS categories (
@@ -71,4 +71,42 @@ fn migrate(conn: &Connection) -> Result<()> {
         ",
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        migrate(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn migrate_creates_all_tables() {
+        let conn = test_db();
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(tables.contains(&"tracks".to_string()));
+        assert!(tables.contains(&"playlists".to_string()));
+        assert!(tables.contains(&"play_history".to_string()));
+        assert!(tables.contains(&"settings".to_string()));
+        assert!(tables.contains(&"categories".to_string()));
+        assert!(tables.contains(&"playlist_tracks".to_string()));
+    }
+
+    #[test]
+    fn migrate_is_idempotent() {
+        let conn = test_db();
+        // Running migrate again should not fail
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap();
+    }
 }

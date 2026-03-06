@@ -87,3 +87,73 @@ fn parse_ytdlp_output(stdout: &str, skip_id: Option<&str>) -> Vec<Track> {
 
     tracks
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_valid_json_line() {
+        let json = r#"{"id":"abc123","title":"Test Song","uploader":"Artist","duration":180.0,"webpage_url":"https://www.youtube.com/watch?v=abc123","thumbnails":[{"url":"https://example.com/thumb.jpg","height":360,"width":480}]}"#;
+        let tracks = parse_ytdlp_output(json, None);
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].youtube_id, "abc123");
+        assert_eq!(tracks[0].title, "Test Song");
+        assert_eq!(tracks[0].artist, "Artist");
+        assert_eq!(tracks[0].duration, 180.0);
+    }
+
+    #[test]
+    fn parse_skips_invalid_json() {
+        let input = "not json\n{\"id\":\"x\",\"title\":\"T\",\"uploader\":\"A\",\"duration\":1.0,\"thumbnails\":[]}\ngarbage";
+        let tracks = parse_ytdlp_output(input, None);
+        assert_eq!(tracks.len(), 1);
+    }
+
+    #[test]
+    fn parse_skips_matching_id() {
+        let json = r#"{"id":"skip_me","title":"T","uploader":"A","duration":1.0,"thumbnails":[]}"#;
+        let tracks = parse_ytdlp_output(json, Some("skip_me"));
+        assert!(tracks.is_empty());
+    }
+
+    #[test]
+    fn parse_missing_fields_use_defaults() {
+        let json = r#"{"thumbnails":[]}"#;
+        let tracks = parse_ytdlp_output(json, None);
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].title, "Unknown");
+        assert_eq!(tracks[0].artist, "Unknown");
+        assert_eq!(tracks[0].duration, 0.0);
+    }
+
+    #[test]
+    fn parse_prefers_uploader_over_channel() {
+        let json = r#"{"id":"x","title":"T","uploader":"Uploader","channel":"Channel","duration":1.0,"thumbnails":[]}"#;
+        let tracks = parse_ytdlp_output(json, None);
+        assert_eq!(tracks[0].artist, "Uploader");
+    }
+
+    #[test]
+    fn parse_falls_back_to_channel() {
+        let json = r#"{"id":"x","title":"T","channel":"Channel","duration":1.0,"thumbnails":[]}"#;
+        let tracks = parse_ytdlp_output(json, None);
+        assert_eq!(tracks[0].artist, "Channel");
+    }
+
+    #[test]
+    fn parse_empty_input() {
+        let tracks = parse_ytdlp_output("", None);
+        assert!(tracks.is_empty());
+    }
+
+    #[test]
+    fn parse_multiple_lines() {
+        let input = "{\"id\":\"a\",\"title\":\"A\",\"uploader\":\"X\",\"duration\":1.0,\"thumbnails\":[]}\n\
+                     {\"id\":\"b\",\"title\":\"B\",\"uploader\":\"Y\",\"duration\":2.0,\"thumbnails\":[]}";
+        let tracks = parse_ytdlp_output(input, None);
+        assert_eq!(tracks.len(), 2);
+        assert_eq!(tracks[0].youtube_id, "a");
+        assert_eq!(tracks[1].youtube_id, "b");
+    }
+}

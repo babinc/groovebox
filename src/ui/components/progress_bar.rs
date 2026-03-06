@@ -117,3 +117,44 @@ pub fn format_time(seconds: f64) -> String {
         format!("{mins:02}:{secs:02}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_time_zero() {
+        assert_eq!(format_time(0.0), "00:00");
+    }
+
+    #[test]
+    fn format_time_seconds_only() {
+        assert_eq!(format_time(45.0), "00:45");
+    }
+
+    #[test]
+    fn format_time_minutes_and_seconds() {
+        assert_eq!(format_time(125.0), "02:05");
+    }
+
+    #[test]
+    fn format_time_hours() {
+        assert_eq!(format_time(3661.0), "1:01:01");
+    }
+
+    #[test]
+    fn format_time_large_hours() {
+        assert_eq!(format_time(36000.0), "10:00:00");
+    }
+
+    #[test]
+    fn format_time_fractional_truncates() {
+        assert_eq!(format_time(59.9), "00:59");
+    }
+
+    #[test]
+    fn format_time_negative_clamps() {
+        // Negative f64 cast to u64 is 0 in Rust
+        assert_eq!(format_time(-5.0), "00:00");
+    }
+}
