@@ -33,11 +33,11 @@ A terminal-based YouTube audio player built in Rust. Search, build playlists, an
 
 **Required (must be on your PATH):**
 
-| Program | Purpose | Install |
-|---------|---------|---------|
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | YouTube audio extraction | `pip install yt-dlp` |
-| [mpv](https://mpv.io/) | Audio playback | `sudo apt install mpv` / `brew install mpv` |
-| [ffmpeg](https://ffmpeg.org/) | Audio processing (used by yt-dlp) | `sudo apt install ffmpeg` / `brew install ffmpeg` |
+| Program | Min Version | Install |
+|---------|-------------|---------|
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 2024.01+ | `pip install yt-dlp` |
+| [mpv](https://mpv.io/) | 0.37+ | `sudo apt install mpv` / `brew install mpv` |
+| [ffmpeg](https://ffmpeg.org/) | 6.0+ | `sudo apt install ffmpeg` / `brew install ffmpeg` |
 
 groovebox checks for these on startup and tells you what's missing.
 
@@ -56,23 +56,25 @@ sudo pacman -S alsa-lib
 
 macOS needs no additional build dependencies.
 
+**Rust 1.75+ required** (install via [rustup.rs](https://rustup.rs)).
+
 **Optional:**
 - **PulseAudio** for the spectrum visualizer (most Linux desktops have this; needs `parec` and `pactl`)
 - **A terminal with image protocol support** for album art thumbnails (Kitty, WezTerm, iTerm2, foot, etc.)
 
-### Build & Run
+### Install from crates.io
 
 ```sh
-git clone https://github.com/your-username/groovebox.git
+cargo install groovebox
+```
+
+### Build from source
+
+```sh
+git clone https://github.com/babinc/groovebox.git
 cd groovebox
 cargo build --release
 ./target/release/groovebox
-```
-
-Or run directly:
-
-```sh
-cargo run --release
 ```
 
 ## Keyboard Shortcuts
