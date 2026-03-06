@@ -44,7 +44,7 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
 
     match key.code {
         KeyCode::Char('q') => AppAction::Quit,
-        KeyCode::Tab | KeyCode::Right if state.focus == Focus::Navigation => {
+        KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') if state.focus == Focus::Navigation => {
             state.focus = Focus::Queue;
             AppAction::None
         }
@@ -57,7 +57,7 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
             };
             AppAction::None
         }
-        KeyCode::BackTab | KeyCode::Left if state.focus == Focus::Queue => {
+        KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') if state.focus == Focus::Queue => {
             state.focus = Focus::Navigation;
             AppAction::None
         }
