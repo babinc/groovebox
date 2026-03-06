@@ -23,8 +23,7 @@ pub async fn get_audio_url(youtube_url: &str) -> Result<String> {
         }
 
         if attempt == 0 {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("yt-dlp attempt 1 failed (status={}): {}", output.status, stderr.trim());
+            // Retry silently (no eprintln - it corrupts the TUI)
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
