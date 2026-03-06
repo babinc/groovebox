@@ -50,7 +50,7 @@ pub fn draw(
     components::progress_bar::draw(f, app_layout.progress_bar, &state.playback, state.frame_count);
 
     // Help bar
-    components::help_bar::draw(f, app_layout.help_bar);
+    components::help_bar::draw(f, app_layout.help_bar, state);
 
     // Popups
     if state.show_playlist_popup {

@@ -111,10 +111,22 @@ impl App {
         let last_position = settings::get_parsed::<f64>(&db, "last_position").unwrap_or(0.0);
         log(&format!("SESSION: last_position = {last_position:.1}s, has_track = {}", last_track.is_some()));
 
+        // Load saved playback preferences
+        let last_volume = settings::get_parsed::<f64>(&db, "volume").unwrap_or(100.0);
+        let last_shuffle = settings::get_parsed::<u8>(&db, "shuffle").unwrap_or(0) == 1;
+        let last_repeat = match settings::get_parsed::<u8>(&db, "repeat").unwrap_or(0) {
+            1 => state::RepeatMode::One,
+            2 => state::RepeatMode::All,
+            _ => state::RepeatMode::Off,
+        };
+
         let mut state = AppState::default();
         state.playlists = playlist_list;
         state.eq_style = eq_style;
         state.preferences = prefs;
+        state.playback.volume = last_volume;
+        state.shuffle = last_shuffle;
+        state.repeat = last_repeat;
 
         // If we have a last track, put it in the queue ready to play
         if let Some(ref track) = last_track {
@@ -369,6 +381,9 @@ impl App {
         } else {
             log("SESSION SAVE: no current track to save");
         }
+        let _ = settings::set_setting(&self.db, "volume", &self.state.playback.volume.to_string());
+        let _ = settings::set_setting(&self.db, "shuffle", if self.state.shuffle { "1" } else { "0" });
+        let _ = settings::set_setting(&self.db, "repeat", &(self.state.repeat as u8).to_string());
         fft::set_fft_active(false);
 
         // Kill mpv process

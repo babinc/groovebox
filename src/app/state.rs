@@ -45,11 +45,12 @@ pub enum ContentView {
     Empty,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RepeatMode {
-    Off,
-    One,
-    All,
+    Off = 0,
+    One = 1,
+    All = 2,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
