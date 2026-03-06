@@ -45,6 +45,17 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
     let vol_pct = state.playback.volume as u32;
     let vol_color = if vol_pct > 100 { theme::RED } else { theme::SUBTEXT0 };
     right_parts.push(Span::styled(format!("vol {vol_pct}%"), Style::default().fg(vol_color)));
+    right_parts.push(Span::raw("  "));
+
+    // Keybinding hints
+    let hint_style = Style::default().fg(theme::SURFACE2);
+    let key_style = Style::default().fg(theme::OVERLAY1);
+    right_parts.extend([
+        Span::styled("/", key_style), Span::styled("search ", hint_style),
+        Span::styled("⏎", key_style), Span::styled("play ", hint_style),
+        Span::styled("␣", key_style), Span::styled("pause ", hint_style),
+        Span::styled("±", key_style), Span::styled("vol ", hint_style),
+    ]);
 
     let mut spans = vec![
         Span::styled(" groovebox ", Style::default().fg(theme::MANTLE).bg(theme::MAUVE).add_modifier(Modifier::BOLD)),

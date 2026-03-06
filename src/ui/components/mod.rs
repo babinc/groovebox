@@ -1,5 +1,6 @@
 pub mod content_panel;
 pub mod equalizer;
+pub mod loading_bar;
 pub mod nav_panel;
 pub mod now_playing;
 pub mod popup;

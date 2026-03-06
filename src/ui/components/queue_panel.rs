@@ -58,6 +58,22 @@ pub fn draw(
                     ),
                 ])
             }
+            ContentView::PlaylistTracks(id) => {
+                let name = state.playlists.iter()
+                    .find(|p| p.id == Some(*id))
+                    .map(|p| p.name.as_str())
+                    .unwrap_or("playlist");
+                Line::from(vec![
+                    Span::styled(
+                        format!(" {name} "),
+                        Style::default().fg(theme::MANTLE).bg(theme::BLUE),
+                    ),
+                    Span::styled(
+                        format!(" {} tracks", state.search_results.len()),
+                        Style::default().fg(theme::SURFACE2),
+                    ),
+                ])
+            }
             ContentView::HistoryList => {
                 Line::from(Span::styled(
                     " history ",

@@ -40,21 +40,29 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
 
     match key.code {
         KeyCode::Char('q') => AppAction::Quit,
+        KeyCode::Tab | KeyCode::Right if state.focus == Focus::Navigation => {
+            state.focus = Focus::Queue;
+            AppAction::None
+        }
         KeyCode::Tab => {
             state.focus = match state.focus {
                 Focus::Navigation => Focus::Queue,
-                Focus::Queue => Focus::Center,
-                Focus::Center => Focus::Navigation,
+                Focus::Queue => Focus::Navigation,
                 Focus::SearchInput => Focus::Queue,
+                _ => Focus::Navigation,
             };
+            AppAction::None
+        }
+        KeyCode::BackTab | KeyCode::Left if state.focus == Focus::Queue => {
+            state.focus = Focus::Navigation;
             AppAction::None
         }
         KeyCode::BackTab => {
             state.focus = match state.focus {
-                Focus::Navigation => Focus::Center,
+                Focus::Navigation => Focus::Queue,
                 Focus::Queue => Focus::Navigation,
-                Focus::Center => Focus::Queue,
                 Focus::SearchInput => Focus::Navigation,
+                _ => Focus::Navigation,
             };
             AppAction::None
         }
@@ -64,8 +72,8 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
             AppAction::None
         }
         KeyCode::Char(' ') => AppAction::TogglePause,
-        KeyCode::Left => AppAction::Seek(-5.0),
-        KeyCode::Right => AppAction::Seek(5.0),
+        KeyCode::Left if state.playback.status != crate::audio::types::PlayStatus::Stopped => AppAction::Seek(-5.0),
+        KeyCode::Right if state.playback.status != crate::audio::types::PlayStatus::Stopped => AppAction::Seek(5.0),
         KeyCode::Char('+') | KeyCode::Char('=') => AppAction::VolumeUp,
         KeyCode::Char('-') => AppAction::VolumeDown,
         KeyCode::Char('n') => AppAction::NextTrack,
@@ -110,23 +118,39 @@ fn handle_panel_key(state: &mut AppState, key: KeyEvent) -> AppAction {
 }
 
 fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
+    let sections = [NavSection::Search, NavSection::Playlists, NavSection::Categories, NavSection::History];
+    let section_idx = sections.iter().position(|s| *s == state.nav_section).unwrap_or(0);
+
     match key.code {
         KeyCode::Char('j') | KeyCode::Down => {
-            state.nav_section = match state.nav_section {
-                NavSection::Search => NavSection::Playlists,
-                NavSection::Playlists => NavSection::Categories,
-                NavSection::Categories => NavSection::History,
-                NavSection::History => NavSection::Search,
-            };
+            // If on Playlists and there are sub-items, navigate within them first
+            if state.nav_section == NavSection::Playlists && !state.playlists.is_empty() {
+                if state.nav_sub_index < state.playlists.len().saturating_sub(1) {
+                    state.nav_sub_index += 1;
+                    return AppAction::None;
+                }
+            }
+            // Move to next section
+            let next = (section_idx + 1) % sections.len();
+            state.nav_section = sections[next];
+            state.nav_sub_index = 0;
             AppAction::None
         }
         KeyCode::Char('k') | KeyCode::Up => {
-            state.nav_section = match state.nav_section {
-                NavSection::Search => NavSection::History,
-                NavSection::Playlists => NavSection::Search,
-                NavSection::Categories => NavSection::Playlists,
-                NavSection::History => NavSection::Categories,
-            };
+            // If on Playlists and sub-index > 0, navigate up within playlists
+            if state.nav_section == NavSection::Playlists && state.nav_sub_index > 0 {
+                state.nav_sub_index -= 1;
+                return AppAction::None;
+            }
+            // Move to previous section
+            let prev = if section_idx == 0 { sections.len() - 1 } else { section_idx - 1 };
+            state.nav_section = sections[prev];
+            // If landing on Playlists, start at last item
+            if state.nav_section == NavSection::Playlists && !state.playlists.is_empty() {
+                state.nav_sub_index = state.playlists.len() - 1;
+            } else {
+                state.nav_sub_index = 0;
+            }
             AppAction::None
         }
         KeyCode::Enter => {
@@ -136,11 +160,19 @@ fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
                     state.content_view = ContentView::SearchResults;
                 }
                 NavSection::Playlists => {
-                    state.content_view = ContentView::SearchResults;
+                    if let Some(pl) = state.playlists.get(state.nav_sub_index) {
+                        if let Some(id) = pl.id {
+                            state.content_view = ContentView::PlaylistTracks(id);
+                            state.content_index = 0;
+                            state.focus = Focus::Queue;
+                            return AppAction::LoadPlaylistTracks(id);
+                        }
+                    }
                     return AppAction::LoadPlaylists;
                 }
                 NavSection::History => {
                     state.content_view = ContentView::HistoryList;
+                    state.content_index = 0;
                     return AppAction::LoadHistory;
                 }
                 NavSection::Categories => {}
@@ -154,6 +186,7 @@ fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
 fn handle_queue_key(state: &mut AppState, key: KeyEvent) -> AppAction {
     let list_len = match &state.content_view {
         ContentView::SearchResults => state.search_results.len(),
+        ContentView::PlaylistTracks(_) => state.search_results.len(),
         ContentView::HistoryList => state.history.len(),
         _ => 0,
     };

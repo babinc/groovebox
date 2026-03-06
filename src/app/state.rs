@@ -1,6 +1,15 @@
 use crate::audio::types::{PlaybackState, SpectrumData};
 use crate::models::{Category, PlayHistoryEntry, Playlist, Track};
 
+#[derive(Debug, Clone)]
+pub struct LoadingProgress {
+    pub active: bool,
+    pub message: String,
+    pub progress: f64, // 0.0..1.0, negative means indeterminate
+    pub total: usize,
+    pub completed: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Focus {
     Navigation,
@@ -61,6 +70,9 @@ pub struct AppState {
     pub categories: Vec<Category>,
     pub history: Vec<PlayHistoryEntry>,
 
+    // Nav panel sub-item index (e.g., which playlist is selected)
+    pub nav_sub_index: usize,
+
     // Preview (highlighted track in search results)
     pub preview_track: Option<Track>,
     pub last_preview_index: Option<usize>,
@@ -69,6 +81,9 @@ pub struct AppState {
     pub show_playlist_popup: bool,
     pub popup_input: String,
     pub popup_description: String,
+
+    // Loading progress
+    pub loading: LoadingProgress,
 
     // Toast
     pub toast_message: Option<String>,
@@ -94,6 +109,7 @@ impl Default for AppState {
             spectrum: SpectrumData::default(),
             shuffle: false,
             repeat: RepeatMode::Off,
+            nav_sub_index: 0,
             preview_track: None,
             last_preview_index: None,
             queue: Vec::new(),
@@ -101,6 +117,13 @@ impl Default for AppState {
             playlists: Vec::new(),
             categories: Vec::new(),
             history: Vec::new(),
+            loading: LoadingProgress {
+                active: false,
+                message: String::new(),
+                progress: -1.0,
+                total: 0,
+                completed: 0,
+            },
             show_playlist_popup: false,
             popup_input: String::new(),
             popup_description: String::new(),

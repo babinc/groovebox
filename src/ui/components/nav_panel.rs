@@ -62,24 +62,29 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
     ))));
 
     // Playlist items
-    for (i, playlist) in state.playlists.iter().enumerate() {
-        let pl_selected = state.nav_section == NavSection::Playlists
-            && focused
-            && state.nav_index == i;
+    if state.nav_section == NavSection::Playlists || !state.playlists.is_empty() {
+        for (i, playlist) in state.playlists.iter().enumerate() {
+            let pl_selected = state.nav_section == NavSection::Playlists
+                && focused
+                && state.nav_sub_index == i;
 
-        let line = if pl_selected {
-            Line::from(Span::styled(
-                format!("   {}", playlist.name),
-                Style::default().fg(theme::MANTLE).bg(theme::BLUE),
-            ))
-        } else {
-            Line::from(Span::styled(
-                format!("   {}", playlist.name),
-                Style::default().fg(theme::SUBTEXT0),
-            ))
-        };
+            let line = if pl_selected {
+                Line::from(vec![
+                    Span::styled(" ", Style::default().fg(theme::BLUE)),
+                    Span::styled(
+                        format!(" {} ", playlist.name),
+                        Style::default().fg(theme::MANTLE).bg(theme::BLUE),
+                    ),
+                ])
+            } else {
+                Line::from(Span::styled(
+                    format!("   {}", playlist.name),
+                    Style::default().fg(theme::SUBTEXT0),
+                ))
+            };
 
-        items.push(ListItem::new(line));
+            items.push(ListItem::new(line));
+        }
     }
 
     let list = List::new(items).block(block);

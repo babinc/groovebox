@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use ratatui::Frame;
 
 use crate::app::state::AppState;
-use crate::audio::types::PlayStatus;
 
 pub fn draw(
     f: &mut Frame,
@@ -16,7 +15,6 @@ pub fn draw(
     thumb_cache: &mut HashMap<String, ratatui_image::protocol::StatefulProtocol>,
 ) {
     let app_layout = layout::build_layout(f.area());
-    let is_playing = matches!(state.playback.status, PlayStatus::Playing | PlayStatus::Paused | PlayStatus::Buffering);
 
     // Background
     let bg = ratatui::widgets::Block::default()
@@ -30,17 +28,18 @@ pub fn draw(
     components::nav_panel::draw(f, app_layout.nav_panel, state);
 
     // Center panel (now playing — big thumbnail, info, nerd facts)
-    if is_playing {
-        components::now_playing::draw(f, app_layout.center_panel, state, thumb_protocol.as_mut());
-    } else {
-        components::now_playing::draw(f, app_layout.center_panel, state, thumb_protocol.as_mut());
-    }
+    components::now_playing::draw(f, app_layout.center_panel, state, thumb_protocol.as_mut());
 
     // Queue/search panel (right — YouTube-style cards)
     components::queue_panel::draw(f, app_layout.queue_panel, state, thumb_cache);
 
-    // Equalizer
-    components::equalizer::draw(f, app_layout.equalizer, &state.spectrum);
+    // Loading bar (overlays equalizer area when active)
+    if state.loading.active {
+        components::loading_bar::draw(f, app_layout.equalizer, &state.loading);
+    } else {
+        // Equalizer
+        components::equalizer::draw(f, app_layout.equalizer, &state.spectrum);
+    }
 
     // Progress bar
     components::progress_bar::draw(f, app_layout.progress_bar, &state.playback);
