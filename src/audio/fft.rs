@@ -201,8 +201,8 @@ fn run_cpal_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Box
             return Ok(());
         }
 
-        // Sleep to accumulate samples (~30 FPS processing rate)
-        std::thread::sleep(std::time::Duration::from_millis(33));
+        // Sleep to accumulate samples (~60 FPS processing rate)
+        std::thread::sleep(std::time::Duration::from_millis(16));
 
         // Grab samples from the shared buffer
         if let Ok(mut buf) = sample_buf.lock() {
@@ -273,23 +273,21 @@ fn run_cpal_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Box
         // Normalize against the frame's peak so the display uses full height
         let frame_max = bins.iter().cloned().fold(0.0f32, f32::max);
         rolling_max = if frame_max > rolling_max {
-            rolling_max * 0.3 + frame_max * 0.7
+            rolling_max * 0.2 + frame_max * 0.8
         } else {
-            rolling_max * 0.995 + frame_max * 0.005
+            rolling_max * 0.98 + frame_max * 0.02
         };
         rolling_max = rolling_max.max(0.001);
         for b in &mut bins {
             *b = (*b / rolling_max).min(1.0);
         }
 
-        // Exponential smoothing — fast attack, moderate decay
+        // Exponential smoothing — instant attack, fast decay
         for i in 0..NUM_BINS {
             prev_bins[i] = if bins[i] > prev_bins[i] {
-                // Jump up immediately to new peaks
                 bins[i]
             } else {
-                // Decay at ~70% per frame for smooth falloff
-                prev_bins[i] * 0.7 + bins[i] * 0.3
+                prev_bins[i] * 0.55 + bins[i] * 0.45
             };
         }
 
