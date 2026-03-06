@@ -33,6 +33,10 @@ struct EqWidget<'a> {
 // Bottom-up fractional block characters (1/8 to 8/8)
 const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
+/// Visual boost for per-column styles (wave, haze) so they fill more vertical
+/// space compared to the spaced-bar styles.
+const COLUMN_BOOST: f32 = 1.8;
+
 impl Widget for EqWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         if area.width == 0 || area.height == 0 {
@@ -285,26 +289,32 @@ fn render_wave(spectrum: &SpectrumData, area: Rect, buf: &mut Buffer) {
         let x = area.x + col as u16;
         if x >= area.x + area.width { break; }
 
-        let bar_height = (val * area.height as f32) as u16;
+        // Boost values so wave fills more vertical space
+        let boosted = (val * COLUMN_BOOST).min(1.0);
+        let bar_height = (boosted * area.height as f32) as u16;
 
-        // Draw the wave line at the top
+        // Draw the wave crest (2 rows thick for visibility)
         if bar_height > 0 {
             let wave_y = area.y + area.height - bar_height;
-            if wave_y >= area.y && wave_y < area.y + area.height {
-                let cell = &mut buf[(x, wave_y)];
-                cell.set_char('━');
-                cell.set_fg(theme::text());
+            let color = gradient_color(boosted);
+            for dy in 0..2u16 {
+                let y = wave_y + dy;
+                if y >= area.y && y < area.y + area.height {
+                    let cell = &mut buf[(x, y)];
+                    cell.set_char(if dy == 0 { '━' } else { '▓' });
+                    cell.set_fg(color);
+                }
             }
         }
 
-        // Fill underneath with dimmer color
-        for row in 0..bar_height.saturating_sub(1) {
+        // Fill underneath with gradient
+        for row in 0..bar_height.saturating_sub(2) {
             let y = area.y + area.height - 1 - row;
             if y <= area.y { break; }
             let fill_intensity = row as f32 / area.height as f32;
-            let fill_color = gradient_color(fill_intensity * 0.6);
+            let fill_color = gradient_color(fill_intensity);
             let cell = &mut buf[(x, y)];
-            cell.set_char('░');
+            cell.set_char('▒');
             cell.set_fg(fill_color);
         }
     }
@@ -319,14 +329,19 @@ fn render_haze(spectrum: &SpectrumData, area: Rect, buf: &mut Buffer) {
         let x = area.x + col as u16;
         if x >= area.x + area.width { break; }
 
-        let bar_height = (val * area.height as f32) as u16;
-        let color = gradient_color(val);
+        // Boost values so haze fills more vertical space
+        let boosted = (val * COLUMN_BOOST).min(1.0);
+        let bar_height = (boosted * area.height as f32) as u16;
 
         for row in 0..bar_height.min(area.height) {
             let y = area.y + area.height - 1 - row;
             if y < area.y { break; }
+            // Denser characters near bottom, fading to lighter near top
+            let t = row as f32 / area.height as f32;
+            let color = gradient_color(t);
+            let ch = if t > 0.5 { '▓' } else if t > 0.2 { '▒' } else { '░' };
             let cell = &mut buf[(x, y)];
-            cell.set_char('░');
+            cell.set_char(ch);
             cell.set_fg(color);
         }
     }

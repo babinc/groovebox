@@ -222,12 +222,14 @@ fn build_track_info<'a>(state: &'a AppState, track: &'a crate::models::Track) ->
     let status = match state.playback.status {
         PlayStatus::Playing => " playing ",
         PlayStatus::Paused => " paused ",
+        PlayStatus::Buffering => " buffering ",
         _ => "",
     };
 
     let status_color = match state.playback.status {
         PlayStatus::Playing => theme::green(),
         PlayStatus::Paused => theme::yellow(),
+        PlayStatus::Buffering => theme::peach(),
         _ => theme::surface2(),
     };
 

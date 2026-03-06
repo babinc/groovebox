@@ -583,6 +583,7 @@ impl App {
             }
             AppAction::Seek(secs) => {
                 if let Some(ref mut mpv) = self.mpv {
+                    self.state.playback.status = PlayStatus::Buffering;
                     let _ = mpv.seek(secs).await;
                 }
             }

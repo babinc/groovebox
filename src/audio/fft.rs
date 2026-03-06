@@ -157,8 +157,9 @@ fn run_parec_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Bo
             let avg = sum / count as f32;
 
             // Apply frequency-dependent gain: boost higher frequencies
-            // that naturally have less energy in music
-            let gain = 1.0 + t0 * 2.0; // 1x at bass, 3x at treble
+            // that naturally have less energy in music.
+            // Exponential curve: 1x at bass, ~6x at treble
+            let gain = (1.0 + t0 * 3.0).powf(1.4);
             bins[bin_idx] = avg * gain;
         }
 
