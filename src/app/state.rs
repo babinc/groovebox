@@ -151,6 +151,7 @@ pub struct AppState {
     // Search
     pub search_query: String,
     pub search_results: Vec<Track>,
+    pub saved_search_results: Vec<Track>,
     pub searching: bool,
 
     // Playback
@@ -226,6 +227,7 @@ impl Default for AppState {
             content_index: 0,
             search_query: String::new(),
             search_results: Vec::new(),
+            saved_search_results: Vec::new(),
             searching: false,
             playback: PlaybackState::default(),
             spectrum: SpectrumData::default(),

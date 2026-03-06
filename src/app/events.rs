@@ -44,7 +44,19 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
 
     match key.code {
         KeyCode::Char('q') => AppAction::Quit,
-        KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') if state.focus == Focus::Navigation => {
+        KeyCode::Char('l') => {
+            if state.focus == Focus::Navigation {
+                state.focus = Focus::Queue;
+            }
+            AppAction::None
+        }
+        KeyCode::Char('h') => {
+            if state.focus == Focus::Queue {
+                state.focus = Focus::Navigation;
+            }
+            AppAction::None
+        }
+        KeyCode::Tab | KeyCode::Right if state.focus == Focus::Navigation => {
             state.focus = Focus::Queue;
             AppAction::None
         }
@@ -57,7 +69,7 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
             };
             AppAction::None
         }
-        KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') if state.focus == Focus::Queue => {
+        KeyCode::BackTab | KeyCode::Left if state.focus == Focus::Queue => {
             state.focus = Focus::Navigation;
             AppAction::None
         }
@@ -162,28 +174,43 @@ fn handle_nav_key(state: &mut AppState, key: KeyEvent) -> AppAction {
         KeyCode::Enter => {
             match state.nav_section {
                 NavSection::Search => {
-                    state.focus = Focus::SearchInput;
+                    // Restore saved search results if we navigated away
+                    if state.content_view != ContentView::SearchResults && !state.saved_search_results.is_empty() {
+                        state.search_results = state.saved_search_results.clone();
+                        state.queue = state.saved_search_results.clone();
+                        state.content_index = 0;
+                    }
                     state.content_view = ContentView::SearchResults;
+                    // If we have results, show them; otherwise open search input
+                    if state.search_results.is_empty() {
+                        state.focus = Focus::SearchInput;
+                    } else {
+                        state.focus = Focus::Queue;
+                    }
                 }
                 NavSection::Playlists => {
                     if let Some(pl) = state.playlists.get(state.nav_sub_index) {
                         if let Some(id) = pl.id {
+                            // Save search results before switching
+                            if state.content_view == ContentView::SearchResults {
+                                state.saved_search_results = state.search_results.clone();
+                            }
                             state.content_view = ContentView::PlaylistTracks(id);
                             state.content_index = 0;
                             state.focus = Focus::Queue;
                             return AppAction::LoadPlaylistTracks(id);
                         }
                     }
-                    // No playlists yet — show empty playlist view
-                    state.content_view = ContentView::SearchResults;
-                    state.search_results.clear();
-                    state.queue.clear();
-                    state.content_index = 0;
-                    state.toast_message = Some("No playlists yet — play a track and press 'a' to create one".into());
+                    // No playlists yet
+                    state.toast_message = Some("No playlists yet - play a track and press 'a' to create one".into());
                     state.toast_timer = 60;
                     return AppAction::LoadPlaylists;
                 }
                 NavSection::History => {
+                    // Save search results before switching
+                    if state.content_view == ContentView::SearchResults {
+                        state.saved_search_results = state.search_results.clone();
+                    }
                     state.content_view = ContentView::HistoryList;
                     state.content_index = 0;
                     return AppAction::LoadHistory;

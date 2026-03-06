@@ -498,10 +498,11 @@ impl App {
                 log(&format!("RELATED: received {} tracks", res.as_ref().map(|t| t.len()).unwrap_or(0)));
                 if let Ok(tracks) = res {
                     if !tracks.is_empty() {
-                        let existing_ids: std::collections::HashSet<&str> = self.state.queue
-                            .iter().map(|t| t.youtube_id.as_str()).collect();
+                        let mut existing_ids: std::collections::HashSet<String> = self.state.queue
+                            .iter().map(|t| t.youtube_id.clone()).collect();
+                        existing_ids.extend(self.state.search_results.iter().map(|t| t.youtube_id.clone()));
                         let new_tracks: Vec<Track> = tracks.into_iter()
-                            .filter(|t| !existing_ids.contains(t.youtube_id.as_str()))
+                            .filter(|t| !existing_ids.contains(&t.youtube_id))
                             .collect();
                         self.state.search_results.extend(new_tracks.clone());
                         self.state.queue.extend(new_tracks);
@@ -838,7 +839,6 @@ impl App {
 
     /// Replace the queue and search results with new tracks, resetting navigation state.
     fn replace_queue(&mut self, tracks: Vec<Track>) {
-        self.thumb_cache.clear(); // evict stale thumbnail protocols
         self.state.search_results = tracks.clone();
         self.state.queue = tracks;
         self.state.content_index = 0;
