@@ -222,8 +222,9 @@ fn draw_track_card(
     let text_area = chunks[2];
     let max_title_len = text_area.width.saturating_sub(5) as usize;
 
-    let title_display = if track.title.len() > max_title_len && max_title_len > 3 {
-        format!("{}...", &track.title[..max_title_len.saturating_sub(3)])
+    let title_display = if track.title.chars().count() > max_title_len && max_title_len > 3 {
+        let truncated: String = track.title.chars().take(max_title_len.saturating_sub(3)).collect();
+        format!("{truncated}...")
     } else {
         track.title.clone()
     };

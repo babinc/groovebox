@@ -56,12 +56,25 @@ pub fn draw(
     let is_playing = matches!(state.playback.status, PlayStatus::Playing | PlayStatus::Paused);
 
     // Layout: thumbnail (large, centered) | track info | nerd facts
+    // Adapt thumbnail height to available space
     let has_thumb = thumb_image.is_some();
+    let thumb_height = if !has_thumb {
+        0
+    } else if inner.height >= 22 {
+        12
+    } else if inner.height >= 16 {
+        8
+    } else if inner.height >= 12 {
+        5
+    } else {
+        0
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(if has_thumb { 12 } else { 0 }),  // big thumbnail
-            Constraint::Length(1),   // spacer
+            Constraint::Length(thumb_height),  // big thumbnail
+            Constraint::Length(if thumb_height > 0 { 1 } else { 0 }),   // spacer
             Constraint::Length(3),   // track info
             Constraint::Length(1),   // separator
             Constraint::Min(1),      // nerd facts
@@ -69,18 +82,19 @@ pub fn draw(
         .split(inner);
 
     // Thumbnail — centered and large
-    if let Some(protocol) = thumb_image {
-        // Center the image horizontally
-        let img_width = inner.width.min(40);
-        let x_offset = (inner.width.saturating_sub(img_width)) / 2;
-        let thumb_area = Rect {
-            x: chunks[0].x + x_offset,
-            y: chunks[0].y,
-            width: img_width,
-            height: chunks[0].height,
-        };
-        let image = ratatui_image::StatefulImage::default();
-        f.render_stateful_widget(image, thumb_area, protocol);
+    if thumb_height > 0 {
+        if let Some(protocol) = thumb_image {
+            let img_width = inner.width.min(40);
+            let x_offset = (inner.width.saturating_sub(img_width)) / 2;
+            let thumb_area = Rect {
+                x: chunks[0].x + x_offset,
+                y: chunks[0].y,
+                width: img_width,
+                height: chunks[0].height,
+            };
+            let image = ratatui_image::StatefulImage::default();
+            f.render_stateful_widget(image, thumb_area, protocol);
+        }
     }
 
     // Track info — centered

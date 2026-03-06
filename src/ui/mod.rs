@@ -24,21 +24,26 @@ pub fn draw(
     // Top bar
     components::top_bar::draw(f, app_layout.top_bar, state);
 
-    // Nav panel (slim left)
-    components::nav_panel::draw(f, app_layout.nav_panel, state);
+    // Nav panel (hidden on narrow terminals)
+    if let Some(nav_area) = app_layout.nav_panel {
+        components::nav_panel::draw(f, nav_area, state);
+    }
 
-    // Center panel (now playing — big thumbnail, info, nerd facts)
-    components::now_playing::draw(f, app_layout.center_panel, state, thumb_protocol.as_mut());
+    // Center panel (hidden on medium/narrow terminals)
+    if let Some(center_area) = app_layout.center_panel {
+        components::now_playing::draw(f, center_area, state, thumb_protocol.as_mut());
+    }
 
-    // Queue/search panel (right — YouTube-style cards)
+    // Queue/search panel (always visible)
     components::queue_panel::draw(f, app_layout.queue_panel, state, thumb_cache);
 
-    // Loading bar (overlays equalizer area when active)
-    if state.loading.active {
-        components::loading_bar::draw(f, app_layout.equalizer, &state.loading);
-    } else {
-        // Equalizer
-        components::equalizer::draw(f, app_layout.equalizer, &state.spectrum, &state.eq_peaks, state.eq_style);
+    // Equalizer / loading bar (hidden on short terminals)
+    if let Some(eq_area) = app_layout.equalizer {
+        if state.loading.active {
+            components::loading_bar::draw(f, eq_area, &state.loading);
+        } else {
+            components::equalizer::draw(f, eq_area, &state.spectrum, &state.eq_peaks, state.eq_style);
+        }
     }
 
     // Progress bar
