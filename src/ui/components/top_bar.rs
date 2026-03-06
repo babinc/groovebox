@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::Rect,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Paragraph},
@@ -11,6 +11,15 @@ use crate::audio::types::PlayStatus;
 use crate::ui::theme;
 
 pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::surface1()))
+        .style(Style::default().bg(theme::mantle()));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
     let (status_icon, status_color) = match state.playback.status {
         PlayStatus::Playing => ("", theme::green()),
         PlayStatus::Paused => ("", theme::yellow()),
@@ -24,8 +33,16 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
         String::new()
     };
 
-    let mut right_parts: Vec<Span> = Vec::new();
+    // Left: logo + track info
+    let left_spans = vec![
+        Span::styled(" groovebox ", Style::default().fg(theme::mantle()).bg(theme::mauve()).add_modifier(Modifier::BOLD)),
+        Span::raw(" "),
+        Span::styled(format!("{status_icon} "), Style::default().fg(status_color)),
+        Span::styled(track_info, Style::default().fg(theme::text())),
+    ];
 
+    // Right: shuffle/repeat badges + volume
+    let mut right_parts: Vec<Span> = Vec::new();
     if state.shuffle {
         right_parts.push(Span::styled(" shfl ", Style::default().fg(theme::mantle()).bg(theme::peach())));
         right_parts.push(Span::raw(" "));
@@ -41,26 +58,21 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
             right_parts.push(Span::raw(" "));
         }
     }
-
     let vol_pct = state.playback.volume as u32;
     let vol_color = if vol_pct > 100 { theme::red() } else { theme::subtext0() };
-    right_parts.push(Span::styled(format!("vol {vol_pct}%"), Style::default().fg(vol_color)));
+    right_parts.push(Span::styled(format!("vol {vol_pct}% "), Style::default().fg(vol_color)));
 
-    let mut spans = vec![
-        Span::styled(" groovebox ", Style::default().fg(theme::mantle()).bg(theme::mauve()).add_modifier(Modifier::BOLD)),
-        Span::raw(" "),
-        Span::styled(format!("{status_icon} "), Style::default().fg(status_color)),
-        Span::styled(track_info, Style::default().fg(theme::text())),
-        Span::raw("  "),
-    ];
-    spans.extend(right_parts);
+    // Calculate right side width for layout split
+    let right_width: u16 = right_parts.iter().map(|s| s.width() as u16).sum();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(theme::surface1()))
-        .style(Style::default().bg(theme::mantle()));
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(1), Constraint::Length(right_width)])
+        .split(inner);
 
-    let paragraph = Paragraph::new(Line::from(spans)).block(block);
-    f.render_widget(paragraph, area);
+    let left = Paragraph::new(Line::from(left_spans));
+    f.render_widget(left, chunks[0]);
+
+    let right = Paragraph::new(Line::from(right_parts)).alignment(Alignment::Right);
+    f.render_widget(right, chunks[1]);
 }

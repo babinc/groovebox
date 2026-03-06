@@ -714,9 +714,10 @@ impl App {
                 }
             }
 
-            // Don't clear loading.active here — wait for mpv to report Playing.
-            // Clearing it now would let stale end-file events through as Stopped,
-            // triggering a false auto-next cascade.
+            // Keep loading active until mpv reports Playing — this prevents
+            // stale end-file events from triggering auto-next
+            self.state.loading.active = true;
+            self.state.loading.kind = state::LoadingKind::Buffering;
             fft::set_fft_active(true);
             self.load_thumbnail_sync(&track);
 
