@@ -24,15 +24,18 @@ fn log_to_file(_msg: &str) {}
 pub async fn get_audio_url(youtube_url: &str) -> Result<String> {
     // Retry once on failure — yt-dlp can transiently fail (rate limits, network)
     for attempt in 0..2 {
-        let output = Command::new("yt-dlp")
-            .args([
-                "-f", "bestaudio",
-                "--get-url",
-                "--no-warnings",
-                youtube_url,
-            ])
-            .output()
-            .await?;
+        let output = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            Command::new("yt-dlp")
+                .args([
+                    "-f", "bestaudio",
+                    "--get-url",
+                    "--no-warnings",
+                    youtube_url,
+                ])
+                .output()
+        ).await
+            .map_err(|_| anyhow::anyhow!("yt-dlp timed out fetching audio URL"))??;
 
         let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if !url.is_empty() {
@@ -52,15 +55,18 @@ pub async fn get_audio_url(youtube_url: &str) -> Result<String> {
 }
 
 pub async fn get_full_metadata(youtube_url: &str) -> Result<Track> {
-    let output = Command::new("yt-dlp")
-        .args([
-            "-f", "bestaudio",
-            "-j",
-            "--no-warnings",
-            youtube_url,
-        ])
-        .output()
-        .await?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        Command::new("yt-dlp")
+            .args([
+                "-f", "bestaudio",
+                "-j",
+                "--no-warnings",
+                youtube_url,
+            ])
+            .output()
+    ).await
+        .map_err(|_| anyhow::anyhow!("yt-dlp timed out fetching metadata"))??;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let result: YtDlpResult = serde_json::from_str(stdout.trim())?;

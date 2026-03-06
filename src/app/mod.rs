@@ -184,6 +184,17 @@ impl App {
         Ok(())
     }
 
+    /// Reset mpv state when the process has crashed or the socket is broken.
+    /// Next `play_track_at_index` will call `ensure_mpv` to re-spawn.
+    fn reset_mpv(&mut self) {
+        log("MPV: connection lost, resetting for auto-recovery");
+        self.mpv = None;
+        self.playback_rx = None;
+        self.state.playback.status = PlayStatus::Stopped;
+        self.state.loading.active = false;
+        fft::set_fft_active(false);
+    }
+
     pub async fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         // Load thumbnails for any restored session tracks
         if !self.state.search_results.is_empty() {
@@ -243,33 +254,48 @@ impl App {
             }
 
             // 2. Drain channel updates (non-blocking)
+            let mut mpv_disconnected = false;
             if let Some(ref mut rx) = self.playback_rx {
                 let is_loading = self.state.loading.active || self.pending_play.is_some();
-                while let Ok(pb_state) = rx.try_recv() {
-                    let track = self.state.playback.current_track.clone();
-                    let volume = self.state.playback.volume;
-                    let prev_status = self.state.playback.status;
-                    // Don't let mpv's end-file event overwrite Buffering with Stopped
-                    // during loading — that would trigger a false auto-next
-                    let ignore_stopped = is_loading
-                        && pb_state.status == PlayStatus::Stopped;
-                    self.state.playback = pb_state;
-                    self.state.playback.current_track = track;
-                    if ignore_stopped {
-                        self.state.playback.status = PlayStatus::Buffering;
-                    }
-                    // Only log status transitions, not every frame
-                    if self.state.playback.status != prev_status {
-                        if ignore_stopped {
-                            log("MPV: ignoring Stopped (is_loading=true), keeping Buffering");
-                        } else {
-                            log(&format!("MPV: status -> {:?}", self.state.playback.status));
+                loop {
+                    match rx.try_recv() {
+                        Ok(pb_state) => {
+                            let track = self.state.playback.current_track.clone();
+                            let volume = self.state.playback.volume;
+                            let prev_status = self.state.playback.status;
+                            // Don't let mpv's end-file event overwrite Buffering with Stopped
+                            // during loading — that would trigger a false auto-next
+                            let ignore_stopped = is_loading
+                                && pb_state.status == PlayStatus::Stopped;
+                            self.state.playback = pb_state;
+                            self.state.playback.current_track = track;
+                            if ignore_stopped {
+                                self.state.playback.status = PlayStatus::Buffering;
+                            }
+                            // Only log status transitions, not every frame
+                            if self.state.playback.status != prev_status {
+                                if ignore_stopped {
+                                    log("MPV: ignoring Stopped (is_loading=true), keeping Buffering");
+                                } else {
+                                    log(&format!("MPV: status -> {:?}", self.state.playback.status));
+                                }
+                            }
+                            if (self.state.playback.volume - volume).abs() > 0.5 {
+                                self.state.playback.volume = volume;
+                            }
+                        }
+                        Err(mpsc::error::TryRecvError::Empty) => break,
+                        Err(mpsc::error::TryRecvError::Disconnected) => {
+                            mpv_disconnected = true;
+                            break;
                         }
                     }
-                    if (self.state.playback.volume - volume).abs() > 0.5 {
-                        self.state.playback.volume = volume;
-                    }
                 }
+            }
+            if mpv_disconnected && self.state.playback.status != PlayStatus::Stopped {
+                self.reset_mpv();
+                self.state.toast_message = Some("mpv crashed, will restart on next play".into());
+                self.state.toast_timer = 60;
             }
 
             // Clear loading state once mpv actually starts playing
@@ -563,43 +589,36 @@ impl App {
             }
             AppAction::TogglePause => {
                 log(&format!("TOGGLE_PAUSE: status={:?} has_mpv={}", self.state.playback.status, self.mpv.is_some()));
-                if let Some(ref mut mpv) = self.mpv {
-                    match self.state.playback.status {
-                        PlayStatus::Playing => { let _ = mpv.set_pause(true).await; }
-                        PlayStatus::Paused => { let _ = mpv.set_pause(false).await; }
-                        _ => {}
-                    }
-                }
+                let result = match self.state.playback.status {
+                    PlayStatus::Playing => if let Some(ref mut mpv) = self.mpv { mpv.set_pause(true).await } else { Ok(()) },
+                    PlayStatus::Paused => if let Some(ref mut mpv) = self.mpv { mpv.set_pause(false).await } else { Ok(()) },
+                    _ => Ok(()),
+                };
+                if result.is_err() { self.reset_mpv(); }
             }
             AppAction::Pause => {
-                if let Some(ref mut mpv) = self.mpv {
-                    let _ = mpv.set_pause(true).await;
-                }
+                let failed = if let Some(ref mut mpv) = self.mpv { mpv.set_pause(true).await.is_err() } else { false };
+                if failed { self.reset_mpv(); }
             }
             AppAction::Resume => {
-                if let Some(ref mut mpv) = self.mpv {
-                    let _ = mpv.set_pause(false).await;
-                }
+                let failed = if let Some(ref mut mpv) = self.mpv { mpv.set_pause(false).await.is_err() } else { false };
+                if failed { self.reset_mpv(); }
             }
             AppAction::Seek(secs) => {
                 if let Some(ref mut mpv) = self.mpv {
                     self.state.playback.status = PlayStatus::Buffering;
-                    let _ = mpv.seek(secs).await;
+                    if mpv.seek(secs).await.is_err() { self.reset_mpv(); }
                 }
             }
             AppAction::VolumeUp => {
                 let new_vol = (self.state.playback.volume + 5.0).min(150.0);
-                if let Some(ref mut mpv) = self.mpv {
-                    let _ = mpv.set_volume(new_vol).await;
-                }
-                self.state.playback.volume = new_vol;
+                let failed = if let Some(ref mut mpv) = self.mpv { mpv.set_volume(new_vol).await.is_err() } else { false };
+                if failed { self.reset_mpv(); } else { self.state.playback.volume = new_vol; }
             }
             AppAction::VolumeDown => {
                 let new_vol = (self.state.playback.volume - 5.0).max(0.0);
-                if let Some(ref mut mpv) = self.mpv {
-                    let _ = mpv.set_volume(new_vol).await;
-                }
-                self.state.playback.volume = new_vol;
+                let failed = if let Some(ref mut mpv) = self.mpv { mpv.set_volume(new_vol).await.is_err() } else { false };
+                if failed { self.reset_mpv(); } else { self.state.playback.volume = new_vol; }
             }
             AppAction::NextTrack => { self.next_track(); }
             AppAction::PrevTrack => { self.prev_track(); }

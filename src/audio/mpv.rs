@@ -163,7 +163,8 @@ impl MpvPlayer {
         });
         let mut line = serde_json::to_string(&msg)?;
         line.push('\n');
-        self.writer.write_all(line.as_bytes()).await?;
+        self.writer.write_all(line.as_bytes()).await
+            .map_err(|e| anyhow::anyhow!("mpv socket write failed (process may have crashed): {e}"))?;
         Ok(())
     }
 

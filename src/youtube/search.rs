@@ -5,16 +5,19 @@ use crate::models::Track;
 use super::types::YtDlpResult;
 
 pub async fn search_youtube(query: &str, max_results: usize) -> Result<Vec<Track>> {
-    let output = Command::new("yt-dlp")
-        .args([
-            "--flat-playlist",
-            "--dump-json",
-            "--no-warnings",
-            "--default-search", "ytsearch",
-            &format!("ytsearch{max_results}:{query}"),
-        ])
-        .output()
-        .await?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        Command::new("yt-dlp")
+            .args([
+                "--flat-playlist",
+                "--dump-json",
+                "--no-warnings",
+                "--default-search", "ytsearch",
+                &format!("ytsearch{max_results}:{query}"),
+            ])
+            .output()
+    ).await
+        .map_err(|_| anyhow::anyhow!("Search timed out"))??;
 
     Ok(parse_ytdlp_output(&String::from_utf8_lossy(&output.stdout), None))
 }
@@ -32,16 +35,19 @@ pub async fn fetch_related(youtube_url: &str, max_results: usize) -> Result<Vec<
 
     let mix_url = format!("https://www.youtube.com/watch?v={video_id}&list=RD{video_id}");
 
-    let output = Command::new("yt-dlp")
-        .args([
-            "--flat-playlist",
-            "--dump-json",
-            "--no-warnings",
-            "--playlist-end", &max_results.to_string(),
-            &mix_url,
-        ])
-        .output()
-        .await?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        Command::new("yt-dlp")
+            .args([
+                "--flat-playlist",
+                "--dump-json",
+                "--no-warnings",
+                "--playlist-end", &max_results.to_string(),
+                &mix_url,
+            ])
+            .output()
+    ).await
+        .map_err(|_| anyhow::anyhow!("Related tracks fetch timed out"))??;
 
     Ok(parse_ytdlp_output(&String::from_utf8_lossy(&output.stdout), Some(video_id)))
 }
