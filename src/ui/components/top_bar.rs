@@ -35,7 +35,10 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
 
     // Left: logo + track info
     let left_spans = vec![
-        Span::styled(" groovebox ", Style::default().fg(theme::mantle()).bg(theme::mauve()).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            format!(" groovebox v{} ", env!("CARGO_PKG_VERSION")),
+            Style::default().fg(theme::mantle()).bg(theme::mauve()).add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" "),
         Span::styled(format!("{status_icon} "), Style::default().fg(status_color)),
         Span::styled(track_info, Style::default().fg(theme::text())),
