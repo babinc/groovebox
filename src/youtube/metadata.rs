@@ -4,6 +4,23 @@ use tokio::process::Command;
 use crate::models::Track;
 use super::types::YtDlpResult;
 
+#[cfg(debug_assertions)]
+fn log_to_file(msg: &str) {
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true).append(true)
+        .open("/tmp/groovebox.log")
+    {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let _ = writeln!(f, "[{:.3}] {msg}", now.as_secs_f64());
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn log_to_file(_msg: &str) {}
+
 pub async fn get_audio_url(youtube_url: &str) -> Result<String> {
     // Retry once on failure — yt-dlp can transiently fail (rate limits, network)
     for attempt in 0..2 {
@@ -23,7 +40,8 @@ pub async fn get_audio_url(youtube_url: &str) -> Result<String> {
         }
 
         if attempt == 0 {
-            // Retry silently (no eprintln - it corrupts the TUI)
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log_to_file(&format!("yt-dlp attempt 1 failed (status={}): {}", output.status, stderr.trim()));
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
