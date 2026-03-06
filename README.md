@@ -41,17 +41,17 @@ A terminal-based YouTube audio player built in Rust. Search, build playlists, an
 
 groovebox checks for these on startup and tells you what's missing.
 
-**Build dependencies (Linux only):**
+**Build dependencies (Linux):**
 
 ```sh
 # Debian / Ubuntu
-sudo apt install libasound2-dev
+sudo apt install libasound2-dev libpipewire-0.3-dev
 
 # Fedora
-sudo dnf install alsa-lib-devel
+sudo dnf install alsa-lib-devel pipewire-devel
 
 # Arch
-sudo pacman -S alsa-lib
+sudo pacman -S alsa-lib pipewire
 ```
 
 macOS needs no additional build dependencies.
@@ -59,7 +59,7 @@ macOS needs no additional build dependencies.
 **Rust 1.75+ required** (install via [rustup.rs](https://rustup.rs)).
 
 **Optional:**
-- **PulseAudio** for the spectrum visualizer (most Linux desktops have this; needs `parec` and `pactl`)
+- **PipeWire** (or PulseAudio) for the spectrum visualizer — most modern Linux desktops ship PipeWire by default
 - **A terminal with image protocol support** for album art thumbnails (Kitty, WezTerm, iTerm2, foot, etc.)
 
 ### Install from crates.io

@@ -203,9 +203,12 @@ fn render_peaks(spectrum: &SpectrumData, peaks: &[f32], area: Rect, buf: &mut Bu
             }
         }
 
-        // Draw the floating peak indicator
-        let peak_val = peak_vals[bar_idx];
-        let peak_row = (peak_val * area.height as f32) as u16;
+        // Draw the floating peak indicator above the bar.
+        // Bars use sub-cell (eighths) precision, so the peak must sit
+        // at least one full row above the bar's topmost occupied row.
+        let peak_val = peak_vals[bar_idx].max(val);
+        let bar_top_row = (full_rows + if remainder > 0 { 1 } else { 0 }) as u16;
+        let peak_row = ((peak_val * area.height as f32) as u16).max(bar_top_row + 1);
         if peak_row > 0 && peak_row <= area.height {
             let y = area.y + area.height - peak_row;
             let peak_color = theme::text();

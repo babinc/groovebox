@@ -327,11 +327,17 @@ impl App {
                         if val > self.state.eq_peaks[i] {
                             self.state.eq_peaks[i] = val;
                         } else {
-                            // Fast decay, snap to zero when tiny
-                            let decayed = self.state.eq_peaks[i] * 0.92;
-                            self.state.eq_peaks[i] = if decayed < 0.05 { 0.0 } else { decayed };
+                            // Slow decay so peaks float above bars and drift down
+                            let decayed = self.state.eq_peaks[i] * 0.96;
+                            self.state.eq_peaks[i] = if decayed < 0.01 { 0.0 } else { decayed };
                         }
                     }
+                }
+            } else {
+                // Decay peaks even between spectrum updates so they animate smoothly
+                for peak in self.state.eq_peaks.iter_mut() {
+                    *peak *= 0.98;
+                    if *peak < 0.01 { *peak = 0.0; }
                 }
             }
 
