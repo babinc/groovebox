@@ -202,6 +202,7 @@ impl App {
                 .split_whitespace()
                 .collect::<Vec<&str>>()
                 .join(" ");
+            log(&format!("RESUME SEARCH: query='{query}'"));
             let tx = self.bg_tx.clone();
             let url = track.youtube_url.clone();
             self.state.fetching_related = true;
