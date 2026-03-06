@@ -117,6 +117,15 @@ impl MpvPlayer {
                                             current_state.bitrate = Some((v / 1000.0) as u32);
                                         }
                                     }
+                                    "pause" => {
+                                        if let Some(v) = data.and_then(|d| d.as_bool()) {
+                                            if v {
+                                                current_state.status = super::types::PlayStatus::Paused;
+                                            } else if current_state.status == super::types::PlayStatus::Paused {
+                                                current_state.status = super::types::PlayStatus::Playing;
+                                            }
+                                        }
+                                    }
                                     _ => {}
                                 }
                             }
@@ -141,6 +150,7 @@ impl MpvPlayer {
         player.observe_property("audio-params/channel-count", 5).await?;
         player.observe_property("audio-codec-name", 6).await?;
         player.observe_property("audio-bitrate", 7).await?;
+        player.observe_property("pause", 8).await?;
 
         Ok((player, state_rx))
     }

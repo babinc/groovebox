@@ -55,28 +55,49 @@ pub enum RepeatMode {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EqStyle {
     Bars,
+    BarsSpread,
     Blocks,
+    BlocksSpread,
     Peaks,
+    PeaksSpread,
     Mirror,
+    MirrorSpread,
     Wave,
+    WaveSpread,
+    Haze,
+    HazeSpread,
 }
 
 impl EqStyle {
-    pub const ALL: [EqStyle; 5] = [
+    pub const ALL: [EqStyle; 12] = [
         EqStyle::Bars,
+        EqStyle::BarsSpread,
         EqStyle::Blocks,
+        EqStyle::BlocksSpread,
         EqStyle::Peaks,
+        EqStyle::PeaksSpread,
         EqStyle::Mirror,
+        EqStyle::MirrorSpread,
         EqStyle::Wave,
+        EqStyle::WaveSpread,
+        EqStyle::Haze,
+        EqStyle::HazeSpread,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
             EqStyle::Bars => "Bars",
+            EqStyle::BarsSpread => "Bars Spread",
             EqStyle::Blocks => "Blocks",
+            EqStyle::BlocksSpread => "Blocks Spread",
             EqStyle::Peaks => "Peaks",
+            EqStyle::PeaksSpread => "Peaks Spread",
             EqStyle::Mirror => "Mirror",
+            EqStyle::MirrorSpread => "Mirror Spread",
             EqStyle::Wave => "Wave",
+            EqStyle::WaveSpread => "Wave Spread",
+            EqStyle::Haze => "Haze",
+            EqStyle::HazeSpread => "Haze Spread",
         }
     }
 
@@ -182,6 +203,13 @@ pub struct AppState {
 
     // Frame counter for animations
     pub frame_count: usize,
+
+    // Seek acceleration
+    pub seek_streak: u32,
+    pub last_seek_frame: usize,
+
+    // Guard against duplicate fetch_related spawns
+    pub fetching_related: bool,
 }
 
 impl Default for AppState {
@@ -228,6 +256,9 @@ impl Default for AppState {
             preferences: Preferences::default(),
             settings_index: 0,
             frame_count: 0,
+            seek_streak: 0,
+            last_seek_frame: 0,
+            fetching_related: false,
         }
     }
 }

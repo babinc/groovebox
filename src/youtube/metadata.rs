@@ -5,21 +5,33 @@ use crate::models::Track;
 use super::types::YtDlpResult;
 
 pub async fn get_audio_url(youtube_url: &str) -> Result<String> {
-    let output = Command::new("yt-dlp")
-        .args([
-            "-f", "bestaudio",
-            "--get-url",
-            "--no-warnings",
-            youtube_url,
-        ])
-        .output()
-        .await?;
+    // Retry once on failure — yt-dlp can transiently fail (rate limits, network)
+    for attempt in 0..2 {
+        let output = Command::new("yt-dlp")
+            .args([
+                "-f", "bestaudio",
+                "--get-url",
+                "--no-warnings",
+                youtube_url,
+            ])
+            .output()
+            .await?;
 
-    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if url.is_empty() {
-        anyhow::bail!("Failed to get audio URL for {youtube_url}");
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !url.is_empty() {
+            return Ok(url);
+        }
+
+        if attempt == 0 {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("yt-dlp attempt 1 failed (status={}): {}", output.status, stderr.trim());
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("yt-dlp failed: {}", stderr.trim());
+        }
     }
-    Ok(url)
+    unreachable!()
 }
 
 pub async fn get_full_metadata(youtube_url: &str) -> Result<Track> {

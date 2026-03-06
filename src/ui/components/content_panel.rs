@@ -17,7 +17,7 @@ pub fn draw(
     thumb_protocol: &mut Option<ratatui_image::protocol::StatefulProtocol>,
 ) {
     let focused = state.focus == Focus::Queue;
-    let border_color = if focused { theme::blue() } else { theme::surface1() };
+    let border_color = if focused { theme::mauve() } else { theme::surface1() };
 
     let block = Block::default()
         .borders(Borders::ALL)

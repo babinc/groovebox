@@ -106,7 +106,7 @@ fn draw_buffering(f: &mut Frame, area: Rect, width: usize, frame_count: usize) {
     f.render_widget(bar, area);
 }
 
-fn format_time(seconds: f64) -> String {
+pub fn format_time(seconds: f64) -> String {
     let total = seconds as u64;
     let mins = total / 60;
     let secs = total % 60;

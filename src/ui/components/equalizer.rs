@@ -39,12 +39,33 @@ impl Widget for EqWidget<'_> {
             return;
         }
 
+        let spread = matches!(
+            self.style,
+            EqStyle::BarsSpread | EqStyle::BlocksSpread | EqStyle::PeaksSpread
+                | EqStyle::MirrorSpread | EqStyle::WaveSpread | EqStyle::HazeSpread
+        );
+
+        let spread_spectrum;
+        let spread_peaks_arr;
+        let (spectrum, peaks) = if spread {
+            spread_spectrum = spread_reorder_spectrum(self.spectrum);
+            let mut peak_buf = [0.0f32; 64];
+            for (i, &v) in self.peaks.iter().enumerate().take(64) {
+                peak_buf[i] = v;
+            }
+            spread_peaks_arr = spread_reorder(&peak_buf);
+            (&spread_spectrum, spread_peaks_arr.as_slice())
+        } else {
+            (self.spectrum, self.peaks)
+        };
+
         match self.style {
-            EqStyle::Bars => render_bars(self.spectrum, area, buf),
-            EqStyle::Blocks => render_blocks(self.spectrum, area, buf),
-            EqStyle::Peaks => render_peaks(self.spectrum, self.peaks, area, buf),
-            EqStyle::Mirror => render_mirror(self.spectrum, area, buf),
-            EqStyle::Wave => render_wave(self.spectrum, area, buf),
+            EqStyle::Bars | EqStyle::BarsSpread => render_bars(spectrum, area, buf),
+            EqStyle::Blocks | EqStyle::BlocksSpread => render_blocks(spectrum, area, buf),
+            EqStyle::Peaks | EqStyle::PeaksSpread => render_peaks(spectrum, peaks, area, buf),
+            EqStyle::Mirror | EqStyle::MirrorSpread => render_mirror(spectrum, area, buf),
+            EqStyle::Wave | EqStyle::WaveSpread => render_wave(spectrum, area, buf),
+            EqStyle::Haze | EqStyle::HazeSpread => render_haze(spectrum, area, buf),
         }
     }
 }
@@ -63,7 +84,7 @@ fn bar_layout(width: u16) -> (u16, u16, u16, u16, u16) {
 }
 
 /// Interpolate spectrum bins to the desired number of bars.
-fn interpolate_bins(bins: &[f32], num_bars: u16) -> Vec<f32> {
+pub fn interpolate_bins(bins: &[f32], num_bars: u16) -> Vec<f32> {
     let n = num_bars as usize;
     let src_len = bins.len();
     if src_len == 0 {
@@ -289,7 +310,53 @@ fn render_wave(spectrum: &SpectrumData, area: Rect, buf: &mut Buffer) {
     }
 }
 
-fn gradient_color(val: f32) -> ratatui::style::Color {
+// === Style 6: Haze — per-column ░ bars with gradient colors ===
+
+fn render_haze(spectrum: &SpectrumData, area: Rect, buf: &mut Buffer) {
+    let vals = interpolate_bins(&spectrum.bins, area.width);
+
+    for (col, &val) in vals.iter().enumerate() {
+        let x = area.x + col as u16;
+        if x >= area.x + area.width { break; }
+
+        let bar_height = (val * area.height as f32) as u16;
+        let color = gradient_color(val);
+
+        for row in 0..bar_height.min(area.height) {
+            let y = area.y + area.height - 1 - row;
+            if y < area.y { break; }
+            let cell = &mut buf[(x, y)];
+            cell.set_char('░');
+            cell.set_fg(color);
+        }
+    }
+}
+
+/// Reorder bins so low frequencies are in the center, highs fan outward.
+/// Input: [low, ..., high]  Output: [high, ..., low, low, ..., high]
+pub fn spread_reorder(bins: &[f32; 64]) -> [f32; 64] {
+    let mut out = [0.0f32; 64];
+    let mid = 32;
+    for (i, &val) in bins.iter().enumerate() {
+        // Place bin i at both sides, mirrored from center
+        // Left side: center going left
+        let left = mid - 1 - i / 2;
+        // Right side: center going right
+        let right = mid + i / 2;
+        if i % 2 == 0 {
+            out[right] = val;
+        } else {
+            out[left] = val;
+        }
+    }
+    out
+}
+
+pub fn spread_reorder_spectrum(spectrum: &SpectrumData) -> SpectrumData {
+    SpectrumData { bins: spread_reorder(& spectrum.bins) }
+}
+
+pub fn gradient_color(val: f32) -> ratatui::style::Color {
     if val < 0.2 {
         theme::green()
     } else if val < 0.4 {

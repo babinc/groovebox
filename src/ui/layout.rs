@@ -41,14 +41,16 @@ pub fn build_layout(area: Rect) -> AppLayout {
 
     let middle = main_chunks[1];
 
+    let queue_width = if w >= 200 { 60 } else if w >= 140 { 50 } else { 40 };
+
     let (nav_panel, center_panel, queue_panel) = if show_center && show_nav {
-        // Full 3-panel layout
+        // Full 3-panel layout: nav fixed, queue capped, center gets the rest
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Length(nav_width),
-                Constraint::Percentage(50),
-                Constraint::Min(28),
+                Constraint::Min(30),
+                Constraint::Length(queue_width),
             ])
             .split(middle);
         (Some(chunks[0]), Some(chunks[1]), chunks[2])

@@ -16,7 +16,37 @@ pub async fn search_youtube(query: &str, max_results: usize) -> Result<Vec<Track
         .output()
         .await?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_ytdlp_output(&String::from_utf8_lossy(&output.stdout), None))
+}
+
+/// Fetch YouTube's recommended/related videos for a given video URL.
+pub async fn fetch_related(youtube_url: &str, max_results: usize) -> Result<Vec<Track>> {
+    let video_id = youtube_url
+        .split("v=").nth(1)
+        .and_then(|s| s.split('&').next())
+        .unwrap_or("");
+
+    if video_id.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mix_url = format!("https://www.youtube.com/watch?v={video_id}&list=RD{video_id}");
+
+    let output = Command::new("yt-dlp")
+        .args([
+            "--flat-playlist",
+            "--dump-json",
+            "--no-warnings",
+            "--playlist-end", &max_results.to_string(),
+            &mix_url,
+        ])
+        .output()
+        .await?;
+
+    Ok(parse_ytdlp_output(&String::from_utf8_lossy(&output.stdout), Some(video_id)))
+}
+
+fn parse_ytdlp_output(stdout: &str, skip_id: Option<&str>) -> Vec<Track> {
     let mut tracks = Vec::new();
 
     for line in stdout.lines() {
@@ -26,6 +56,9 @@ pub async fn search_youtube(query: &str, max_results: usize) -> Result<Vec<Track
         if let Ok(result) = serde_json::from_str::<YtDlpResult>(line) {
             let thumbnail_url = result.best_thumbnail();
             let youtube_id = result.id.unwrap_or_default();
+            if skip_id.is_some_and(|id| id == youtube_id) {
+                continue;
+            }
             let title = result.title.unwrap_or_else(|| "Unknown".into());
             let artist = result.uploader
                 .or(result.channel)
@@ -52,5 +85,5 @@ pub async fn search_youtube(query: &str, max_results: usize) -> Result<Vec<Track
         }
     }
 
-    Ok(tracks)
+    tracks
 }

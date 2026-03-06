@@ -76,8 +76,8 @@ pub fn handle_key(state: &mut AppState, key: KeyEvent) -> AppAction {
             AppAction::None
         }
         KeyCode::Char(' ') => AppAction::TogglePause,
-        KeyCode::Left if state.playback.status != crate::audio::types::PlayStatus::Stopped => AppAction::Seek(-5.0),
-        KeyCode::Right if state.playback.status != crate::audio::types::PlayStatus::Stopped => AppAction::Seek(5.0),
+        KeyCode::Left if state.playback.status != crate::audio::types::PlayStatus::Stopped => seek_with_accel(state, -1.0),
+        KeyCode::Right if state.playback.status != crate::audio::types::PlayStatus::Stopped => seek_with_accel(state, 1.0),
         KeyCode::Char('+') | KeyCode::Char('=') => AppAction::VolumeUp,
         KeyCode::Char('-') => AppAction::VolumeDown,
         KeyCode::Char('n') => AppAction::NextTrack,
@@ -280,6 +280,33 @@ fn handle_search_input(state: &mut AppState, key: KeyEvent) -> AppAction {
         }
         _ => AppAction::None,
     }
+}
+
+fn seek_with_accel(state: &mut AppState, direction: f64) -> AppAction {
+    // If seeking within ~10 frames of last seek, increase streak
+    let gap = state.frame_count.saturating_sub(state.last_seek_frame);
+    if gap < 15 {
+        state.seek_streak += 1;
+    } else {
+        state.seek_streak = 1;
+    }
+    state.last_seek_frame = state.frame_count;
+
+    // Accelerate: 5s -> 10s -> 15s -> 30s -> 60s
+    let secs = match state.seek_streak {
+        0..=3 => 5.0,
+        4..=8 => 10.0,
+        9..=15 => 15.0,
+        16..=25 => 30.0,
+        _ => 60.0,
+    };
+
+    let label = if secs < 60.0 { format!("{:.0}s", secs) } else { format!("{:.0}m", secs / 60.0) };
+    let arrow = if direction > 0.0 { ">>" } else { "<<" };
+    state.toast_message = Some(format!("{arrow} {label}"));
+    state.toast_timer = 15;
+
+    AppAction::Seek(direction * secs)
 }
 
 fn handle_popup_key(state: &mut AppState, key: KeyEvent) -> AppAction {

@@ -47,6 +47,8 @@ enum BgResult {
     AudioUrlReady(usize, Track, Result<String>), // idx, track, url
     MetadataReady(Result<Track>),
     PlaylistTracksReady(Result<Vec<Track>>),
+    RelatedReady(Result<Vec<Track>>),
+    HiResThumbnailReady(String), // youtube_id
 }
 
 pub struct App {
@@ -68,6 +70,9 @@ pub struct App {
 
 impl App {
     pub async fn new() -> Result<Self> {
+        // Clean up old cached thumbnails (older than 7 days)
+        thumbnail::cleanup_cache(std::time::Duration::from_secs(7 * 24 * 3600));
+
         let db = database::open_database()?;
 
         let playlist_list = playlists::list_playlists(&db).unwrap_or_default();
@@ -95,11 +100,16 @@ impl App {
         }
 
         // Restore last session track
-        let last_track = settings::get_setting(&db, "last_track_id")
-            .ok()
-            .flatten()
-            .and_then(|yt_id| tracks::get_track_by_youtube_id(&db, &yt_id).ok());
+        let last_track_id_raw = settings::get_setting(&db, "last_track_id").ok().flatten();
+        log(&format!("SESSION: last_track_id from DB = {:?}", last_track_id_raw));
+        let last_track = last_track_id_raw
+            .and_then(|yt_id| {
+                let result = tracks::get_track_by_youtube_id(&db, &yt_id);
+                log(&format!("SESSION: DB lookup for '{yt_id}' = {:?}", result.as_ref().map(|t| &t.title)));
+                result.ok()
+            });
         let last_position = settings::get_parsed::<f64>(&db, "last_position").unwrap_or(0.0);
+        log(&format!("SESSION: last_position = {last_position:.1}s, has_track = {}", last_track.is_some()));
 
         let mut state = AppState::default();
         state.playlists = playlist_list;
@@ -108,6 +118,7 @@ impl App {
 
         // If we have a last track, put it in the queue ready to play
         if let Some(ref track) = last_track {
+            log(&format!("SESSION: restoring '{}' by {} ({})", track.title, track.artist, track.youtube_id));
             state.search_results = vec![track.clone()];
             state.queue = vec![track.clone()];
             state.preview_track = Some(track.clone());
@@ -124,6 +135,7 @@ impl App {
                 Ok::<_, std::io::Error>(picker)
             })
             .ok();
+        log(&format!("IMAGE_PICKER: {:?}", image_picker.as_ref().map(|p| p.protocol_type())));
 
         let (bg_tx, bg_rx) = mpsc::channel(64);
 
@@ -167,9 +179,9 @@ impl App {
         }
 
         // Auto-resume playback from last session
-        if let Some((_track, position)) = self.auto_resume.take() {
+        if let Some((ref track, position)) = self.auto_resume.take() {
+            log(&format!("RESUME: playing '{}' at queue[0], seeking to {position:.1}s", track.title));
             self.play_track_at_index(0);
-            // Store seek position to apply after mpv starts playing
             self.resume_seek = if position > 5.0 { Some(position - 2.0) } else { None };
         }
 
@@ -317,7 +329,9 @@ impl App {
                 && !self.state.loading.active
                 && self.pending_play.is_none()
             {
-                log(&format!("AUTO-NEXT: triggered, queue_index={:?}", self.state.queue_index));
+                log(&format!("AUTO-NEXT: triggered, queue_index={:?}, queue_len={}, current_track={:?}",
+                    self.state.queue_index, self.state.queue.len(),
+                    self.state.playback.current_track.as_ref().map(|t| &t.title)));
                 self.handle_auto_next().await;
             }
 
@@ -338,8 +352,11 @@ impl App {
         self.record_current_play();
         // Save last track + position for session restore
         if let Some(ref track) = self.state.playback.current_track {
+            log(&format!("SESSION SAVE: '{}' ({}) at {:.1}s", track.title, track.youtube_id, self.state.playback.position));
             let _ = settings::set_setting(&self.db, "last_track_id", &track.youtube_id);
             let _ = settings::set_setting(&self.db, "last_position", &self.state.playback.position.to_string());
+        } else {
+            log("SESSION SAVE: no current track to save");
         }
         fft::set_fft_active(false);
 
@@ -392,6 +409,7 @@ impl App {
                 }
             }
             BgResult::AudioUrlReady(idx, track, res) => {
+                log(&format!("AUDIO_URL: idx={idx} track='{}' success={}", track.title, res.is_ok()));
                 match res {
                     Ok(audio_url) => {
                         self.state.queue_index = Some(idx);
@@ -410,8 +428,10 @@ impl App {
                         self.pending_play = Some((track, audio_url));
                     }
                     Err(e) => {
+                        log(&format!("AUDIO_URL: FAILED for '{}': {e}", track.title));
                         self.state.loading.active = false;
                         self.state.playback.status = PlayStatus::Stopped;
+                        self.state.queue_index = None; // prevent auto-next from advancing
                         self.state.toast_message = Some(format!("URL error: {e}"));
                         self.state.toast_timer = 60;
                         fft::set_fft_active(false);
@@ -421,11 +441,12 @@ impl App {
             BgResult::MetadataReady(res) => {
                 if let Ok(full_track) = res {
                     if let Some(ref mut current) = self.state.playback.current_track {
-                        current.codec = full_track.codec.or(current.codec.clone());
-                        current.bitrate = full_track.bitrate.or(current.bitrate);
-                        current.sample_rate = full_track.sample_rate.or(current.sample_rate);
-                        current.channels = full_track.channels.or(current.channels);
-                        current.filesize = full_track.filesize.or(current.filesize);
+                        if full_track.codec.is_some() { current.codec = full_track.codec; }
+                        if full_track.bitrate.is_some() { current.bitrate = full_track.bitrate; }
+                        if full_track.sample_rate.is_some() { current.sample_rate = full_track.sample_rate; }
+                        if full_track.channels.is_some() { current.channels = full_track.channels; }
+                        if full_track.filesize.is_some() { current.filesize = full_track.filesize; }
+                        if full_track.description.is_some() { current.description = full_track.description; }
                     }
                 }
             }
@@ -433,6 +454,32 @@ impl App {
                 self.state.loading.active = false;
                 if let Ok(tracks) = res {
                     self.replace_queue(tracks);
+                }
+            }
+            BgResult::RelatedReady(res) => {
+                self.state.fetching_related = false;
+                log(&format!("RELATED: received {} tracks", res.as_ref().map(|t| t.len()).unwrap_or(0)));
+                if let Ok(tracks) = res {
+                    if !tracks.is_empty() {
+                        let existing_ids: std::collections::HashSet<&str> = self.state.queue
+                            .iter().map(|t| t.youtube_id.as_str()).collect();
+                        let new_tracks: Vec<Track> = tracks.into_iter()
+                            .filter(|t| !existing_ids.contains(t.youtube_id.as_str()))
+                            .collect();
+                        self.state.search_results.extend(new_tracks.clone());
+                        self.state.queue.extend(new_tracks);
+                        self.spawn_thumbnail_batch();
+                    }
+                }
+            }
+            BgResult::HiResThumbnailReady(yt_id) => {
+                log(&format!("THUMB: hi-res ready for {yt_id}, current_protocol_id={}", self.thumb_protocol_id));
+                if self.thumb_protocol_id == yt_id {
+                    if let Some(ref current) = self.state.playback.current_track {
+                        let track = current.clone();
+                        self.thumb_protocol_id.clear(); // force reload
+                        self.load_thumbnail_sync(&track);
+                    }
                 }
             }
         }
@@ -462,6 +509,7 @@ impl App {
                 self.play_track_at_index(idx);
             }
             AppAction::TogglePause => {
+                log(&format!("TOGGLE_PAUSE: status={:?} has_mpv={}", self.state.playback.status, self.mpv.is_some()));
                 if let Some(ref mut mpv) = self.mpv {
                     match self.state.playback.status {
                         PlayStatus::Playing => { let _ = mpv.set_pause(true).await; }
@@ -633,6 +681,17 @@ impl App {
             let result = metadata::get_audio_url(&url).await;
             let _ = tx.send(BgResult::AudioUrlReady(idx, track_clone, result)).await;
         });
+
+        // Auto-fetch YouTube recommendations when queue is small
+        if self.state.queue.len() <= 1 && !self.state.fetching_related {
+            self.state.fetching_related = true;
+            let tx = self.bg_tx.clone();
+            let url = self.state.queue[idx].youtube_url.clone();
+            tokio::spawn(async move {
+                let result = search::fetch_related(&url, 20).await;
+                let _ = tx.send(BgResult::RelatedReady(result)).await;
+            });
+        }
     }
 
     async fn process_pending_play(&mut self) {
@@ -668,6 +727,18 @@ impl App {
                 let result = metadata::get_full_metadata(&url).await;
                 let _ = tx.send(BgResult::MetadataReady(result)).await;
             });
+
+            // Fetch hi-res thumbnail for now-playing panel
+            let hires_path = thumbnail::hires_thumbnail_path(&track.youtube_id);
+            if !hires_path.exists() {
+                let tx = self.bg_tx.clone();
+                let yt_id = track.youtube_id.clone();
+                tokio::spawn(async move {
+                    if thumbnail::download_hires_thumbnail(&yt_id).await.is_ok() {
+                        let _ = tx.send(BgResult::HiResThumbnailReady(yt_id)).await;
+                    }
+                });
+            }
         }
     }
 
@@ -683,20 +754,40 @@ impl App {
             return;
         }
 
-        let path = thumbnail::thumbnail_path(&track.youtube_id);
+        // Prefer hi-res thumbnail, fall back to standard
+        let hires_path = thumbnail::hires_thumbnail_path(&track.youtube_id);
+        let std_path = thumbnail::thumbnail_path(&track.youtube_id);
+        let path = if hires_path.exists() { hires_path } else { std_path };
+        log(&format!("THUMB: loading {} using={}", track.youtube_id, path.display()));
         if path.exists() {
             if let Some(ref mut picker) = self.image_picker {
-                if let Ok(reader) = image::ImageReader::open(&path) {
-                    if let Ok(reader) = reader.with_guessed_format() {
-                        if let Ok(img) = reader.decode() {
-                            let protocol = picker.new_resize_protocol(img);
-                            self.thumb_protocol = Some(protocol);
-                            self.thumb_protocol_id = track.youtube_id.clone();
-                            return;
-                        }
+                match image::ImageReader::open(&path)
+                    .and_then(|r| r.with_guessed_format())
+                    .map_err(|e| e.to_string())
+                    .and_then(|r| r.decode().map_err(|e| e.to_string()))
+                {
+                    Ok(img) => {
+                        log(&format!("THUMB: decoded {}x{} for {}", img.width(), img.height(), track.youtube_id));
+                        // Downscale large images for terminal protocol compatibility
+                        let img = if img.width() > 640 || img.height() > 360 {
+                            img.resize(640, 360, image::imageops::FilterType::Triangle)
+                        } else {
+                            img
+                        };
+                        let protocol = picker.new_resize_protocol(img);
+                        self.thumb_protocol = Some(protocol);
+                        self.thumb_protocol_id = track.youtube_id.clone();
+                        return;
+                    }
+                    Err(e) => {
+                        log(&format!("THUMB: decode FAILED for {}: {e}", track.youtube_id));
                     }
                 }
+            } else {
+                log("THUMB: no image_picker available");
             }
+        } else {
+            log(&format!("THUMB: no file found for {}", track.youtube_id));
         }
         self.thumb_protocol = None;
         self.thumb_protocol_id.clear();

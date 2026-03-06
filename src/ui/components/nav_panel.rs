@@ -14,8 +14,6 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
     let border_color = if focused { theme::mauve() } else { theme::surface1() };
 
     let block = Block::default()
-        .title(" library ")
-        .title_style(Style::default().fg(theme::subtext0()))
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(border_color))
@@ -48,10 +46,10 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
                 Span::styled(format!(" {label}"), Style::default().fg(*accent)),
             ])
         } else {
-            Line::from(Span::styled(
-                format!("   {label}"),
-                Style::default().fg(theme::overlay1()),
-            ))
+            Line::from(vec![
+                Span::raw("  "),
+                Span::styled(label.to_string(), Style::default().fg(theme::overlay1())),
+            ])
         };
 
         items.push(ListItem::new(line));
@@ -72,7 +70,7 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
 
             let line = if pl_selected {
                 Line::from(vec![
-                    Span::styled(" ", Style::default().fg(theme::blue())),
+                    Span::styled("  ", Style::default().fg(theme::blue())),
                     Span::styled(
                         format!(" {} ", playlist.name),
                         Style::default().fg(theme::mantle()).bg(theme::blue()),
@@ -80,7 +78,7 @@ pub fn draw(f: &mut Frame, area: Rect, state: &AppState) {
                 ])
             } else {
                 Line::from(Span::styled(
-                    format!("   {}", playlist.name),
+                    format!("    {}", playlist.name),
                     Style::default().fg(theme::subtext0()),
                 ))
             };

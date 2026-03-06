@@ -70,6 +70,7 @@ fn run_parec_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Bo
     let mut planner = FftPlanner::<f32>::new();
     let fft = planner.plan_fft_forward(FFT_SIZE);
     let mut prev_bins = [0.0f32; NUM_BINS];
+    let mut rolling_max: f32 = 0.001;
     let mut fft_input = vec![Complex::new(0.0f32, 0.0); FFT_SIZE];
     let mut bins = [0.0f32; NUM_BINS];
     let mut sample_buf: Vec<f32> = Vec::with_capacity(FFT_SIZE * 2);
@@ -161,10 +162,19 @@ fn run_parec_capture(spectrum_tx: &watch::Sender<SpectrumData>) -> Result<(), Bo
             bins[bin_idx] = avg * gain;
         }
 
-        // Normalize to 0.0-1.0 range
-        let max_val = bins.iter().cloned().fold(0.0f32, f32::max).max(0.001);
+        // Normalize using a rolling max that decays slowly, so bass
+        // doesn't permanently pin at 1.0 every frame
+        let frame_max = bins.iter().cloned().fold(0.0f32, f32::max);
+        rolling_max = if frame_max > rolling_max {
+            // Jump up quickly to avoid clipping
+            rolling_max * 0.3 + frame_max * 0.7
+        } else {
+            // Decay slowly so quiet passages still show movement
+            rolling_max * 0.995 + frame_max * 0.005
+        };
+        rolling_max = rolling_max.max(0.001);
         for b in &mut bins {
-            *b = (*b / max_val).min(1.0);
+            *b = (*b / rolling_max).min(1.0);
         }
 
         // Exponential decay smoothing

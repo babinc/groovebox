@@ -10,6 +10,7 @@ use ratatui::{
 
 use crate::app::state::{AppState, ContentView, Focus, Preferences};
 use crate::models::Track;
+use crate::ui::components::now_playing::truncate_str;
 use crate::ui::theme;
 
 const CARD_HEIGHT: u16 = 5;
@@ -21,7 +22,7 @@ pub fn draw(
     thumb_cache: &mut HashMap<String, ratatui_image::protocol::StatefulProtocol>,
 ) {
     let focused = state.focus == Focus::Queue;
-    let border_color = if focused { theme::blue() } else { theme::surface1() };
+    let border_color = if focused { theme::mauve() } else { theme::surface1() };
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -222,12 +223,7 @@ fn draw_track_card(
     let text_area = chunks[2];
     let max_title_len = text_area.width.saturating_sub(5) as usize;
 
-    let title_display = if track.title.chars().count() > max_title_len && max_title_len > 3 {
-        let truncated: String = track.title.chars().take(max_title_len.saturating_sub(3)).collect();
-        format!("{truncated}...")
-    } else {
-        track.title.clone()
-    };
+    let title_display = truncate_str(&track.title, max_title_len);
 
     let num_style = if is_playing {
         Style::default().fg(theme::green()).add_modifier(Modifier::BOLD)
