@@ -140,14 +140,40 @@ impl App {
         let (spectrum_tx, spectrum_rx) = watch::channel(SpectrumData::default());
         fft::spawn_fft_task(spectrum_tx);
 
-        let image_picker = ratatui_image::picker::Picker::from_query_stdio()
-            .or_else(|_| {
+        // Detect terminal image protocol support.
+        // Inside tmux, from_query_stdio() sends escape sequences that tmux
+        // intercepts (unless allow-passthrough is on). The responses can leave
+        // stale bytes in stdin that poison crossterm's event parser, causing
+        // sluggish/broken keyboard input. So we skip the query in tmux and
+        // only enable images if we can detect a capable outer terminal.
+        let in_tmux = std::env::var("TMUX").is_ok();
+        let image_picker = if in_tmux {
+            // Detect Kitty as the outer terminal — it supports its own image
+            // protocol natively, but we need tmux allow-passthrough for it to
+            // work. Without passthrough, skip images entirely rather than
+            // falling back to blurry halfblocks.
+            let outer_is_kitty = std::env::var("KITTY_PID").is_ok()
+                || std::env::var("KITTY_WINDOW_ID").is_ok();
+            if outer_is_kitty {
+                log("IMAGE_PICKER: inside tmux with Kitty, using Kitty protocol");
                 let mut picker = ratatui_image::picker::Picker::from_fontsize((8, 16));
-                picker.set_protocol_type(ratatui_image::picker::ProtocolType::Halfblocks);
-                Ok::<_, std::io::Error>(picker)
-            })
-            .ok();
+                picker.set_protocol_type(ratatui_image::picker::ProtocolType::Kitty);
+                Some(picker)
+            } else {
+                log("IMAGE_PICKER: inside tmux without known image-capable terminal, disabling images");
+                None
+            }
+        } else {
+            ratatui_image::picker::Picker::from_query_stdio().ok()
+        };
         log(&format!("IMAGE_PICKER: {:?}", image_picker.as_ref().map(|p| p.protocol_type())));
+
+        // Drain any stale bytes left in stdin from terminal queries above.
+        while crossterm::event::poll(std::time::Duration::from_millis(50))
+            .unwrap_or(false)
+        {
+            let _ = crossterm::event::read();
+        }
 
         let (bg_tx, bg_rx) = mpsc::channel(64);
 
