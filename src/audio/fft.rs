@@ -41,8 +41,11 @@ pub fn spawn_fft_task(spectrum_tx: watch::Sender<SpectrumData>) {
             }
 
             // Try to capture system audio via cpal loopback
-            if run_cpal_capture(&spectrum_tx).is_err() {
-                std::thread::sleep(std::time::Duration::from_secs(2));
+            if let Err(e) = run_cpal_capture(&spectrum_tx) {
+                log_fft(&format!("Capture failed: {e} — retrying in 5s"));
+                // Send empty spectrum so visualizer shows flat instead of stale data
+                let _ = spectrum_tx.send(SpectrumData::default());
+                std::thread::sleep(std::time::Duration::from_secs(5));
             }
         }
     });

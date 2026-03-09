@@ -62,10 +62,22 @@ macOS needs no additional build dependencies.
 - **PipeWire** (or PulseAudio) for the spectrum visualizer — most modern Linux desktops ship PipeWire by default
 - **A terminal with image protocol support** for album art thumbnails (Kitty, WezTerm, iTerm2, foot, etc.)
 
-### Install from crates.io
+### Download pre-built binary
+
+Grab the latest release for your platform from [GitHub Releases](https://github.com/babinc/groovebox/releases):
 
 ```sh
-cargo install groovebox
+# Linux
+tar xzf groovebox-linux-x86_64.tar.gz
+./groovebox
+
+# macOS (Apple Silicon)
+tar xzf groovebox-macos-aarch64.tar.gz
+./groovebox
+
+# macOS (Intel)
+tar xzf groovebox-macos-x86_64.tar.gz
+./groovebox
 ```
 
 ### Build from source
