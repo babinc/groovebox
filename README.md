@@ -67,7 +67,7 @@ macOS needs no additional build dependencies.
 Grab the latest release for your platform from [GitHub Releases](https://github.com/babinc/groovebox/releases):
 
 ```sh
-# Linux
+# Linux (requires libpipewire-0.3 and libasound2 — most desktops have these)
 tar xzf groovebox-linux-x86_64.tar.gz
 ./groovebox
 
