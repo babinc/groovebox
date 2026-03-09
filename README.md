@@ -78,6 +78,10 @@ tar xzf groovebox-macos-aarch64.tar.gz
 # macOS (Intel)
 tar xzf groovebox-macos-x86_64.tar.gz
 ./groovebox
+
+# Windows (run in Windows Terminal)
+# Extract groovebox-windows-x86_64.zip, then:
+groovebox.exe
 ```
 
 ### Build from source

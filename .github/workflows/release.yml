@@ -22,6 +22,9 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             name: macos-aarch64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name: windows-x86_64
 
     runs-on: ${{ matrix.os }}
 
@@ -46,18 +49,25 @@ jobs:
         if: matrix.target != 'aarch64-apple-darwin'
         run: cargo test --release --target ${{ matrix.target }}
 
-      - name: Package
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ../../../groovebox-${{ matrix.name }}.tar.gz groovebox
           cd ../../..
 
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path target/${{ matrix.target }}/release/groovebox.exe -DestinationPath groovebox-${{ matrix.name }}.zip
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: groovebox-${{ matrix.name }}
-          path: groovebox-${{ matrix.name }}.tar.gz
+          path: groovebox-${{ matrix.name }}.*
 
   release:
     needs: build
@@ -70,5 +80,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: groovebox-*.tar.gz
+          files: |
+            groovebox-*.tar.gz
+            groovebox-*.zip
           generate_release_notes: true
