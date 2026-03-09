@@ -78,6 +78,9 @@ tar xzf groovebox-macos-aarch64.tar.gz
 # macOS (Intel)
 tar xzf groovebox-macos-x86_64.tar.gz
 ./groovebox
+
+# Windows
+# groovebox is built for systems with taste. Try Linux or macOS.
 ```
 
 ### Build from source
