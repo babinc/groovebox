@@ -62,9 +62,17 @@ macOS needs no additional build dependencies.
 - **PipeWire** (or PulseAudio) for the spectrum visualizer — most modern Linux desktops ship PipeWire by default
 - **A terminal with image protocol support** for album art thumbnails (Kitty, WezTerm, iTerm2, foot, etc.)
 
-### Download pre-built binary
+### Quick install
 
-Grab the latest release for your platform from [GitHub Releases](https://github.com/babinc/groovebox/releases):
+```sh
+curl -sSL https://raw.githubusercontent.com/babinc/groovebox/master/install.sh | sh
+```
+
+This detects your platform, installs runtime dependencies, downloads the binary, and puts it in `~/.local/bin`.
+
+### Download manually
+
+Grab the latest release from [GitHub Releases](https://github.com/babinc/groovebox/releases):
 
 ```sh
 # Linux (requires libpipewire-0.3 and libasound2 — most desktops have these)
