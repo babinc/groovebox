@@ -1,7 +1,7 @@
 use ratatui::style::Color;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-static THEME_INDEX: AtomicUsize = AtomicUsize::new(0);
+static THEME_INDEX: AtomicUsize = AtomicUsize::new(5); // System theme
 
 pub const THEME_NAMES: &[&str] = &[
     "Catppuccin Mocha",
@@ -9,6 +9,7 @@ pub const THEME_NAMES: &[&str] = &[
     "Dracula",
     "Gruvbox Dark",
     "Nord",
+    "System",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -186,6 +187,35 @@ const THEMES: &[Theme] = &[
         base: Color::Rgb(46, 52, 64),          // nord polar0
         mantle: Color::Rgb(41, 46, 56),
         crust: Color::Rgb(36, 40, 48),
+    },
+    // System — uses terminal's own ANSI colors so it follows the system/terminal theme
+    Theme {
+        rosewater: Color::White,
+        flamingo: Color::LightRed,
+        pink: Color::LightMagenta,
+        mauve: Color::LightCyan,        // primary accent — cyan holds up across themes
+        red: Color::Red,
+        maroon: Color::Red,
+        peach: Color::Yellow,
+        yellow: Color::LightYellow,
+        green: Color::Green,
+        teal: Color::Cyan,
+        sky: Color::LightCyan,
+        sapphire: Color::Blue,
+        blue: Color::DarkGray,          // selection bg — subtle, not overwhelming
+        lavender: Color::LightBlue,
+        text: Color::Reset,
+        subtext1: Color::White,
+        subtext0: Color::Gray,
+        overlay2: Color::Gray,
+        overlay1: Color::DarkGray,
+        overlay0: Color::DarkGray,
+        surface2: Color::DarkGray,
+        surface1: Color::DarkGray,
+        surface0: Color::Black,
+        base: Color::Reset,
+        mantle: Color::Black,
+        crust: Color::Black,
     },
 ];
 

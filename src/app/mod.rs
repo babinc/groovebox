@@ -3,12 +3,12 @@ pub mod state;
 
 use std::collections::HashMap;
 use std::io;
-use std::io::Write as _;
 use std::path::PathBuf;
 use std::time::Duration;
 
 #[cfg(debug_assertions)]
 fn log(msg: &str) {
+    use std::io::Write as _;
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true).append(true)
         .open("/tmp/groovebox.log")
