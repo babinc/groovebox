@@ -64,6 +64,7 @@ pub struct App {
     thumb_cache: HashMap<String, ratatui_image::protocol::StatefulProtocol>,
     image_picker: Option<ratatui_image::picker::Picker>,
     pending_play: Option<(Track, String)>,
+    mpv_file_sent: bool,              // true after load_file() sent, false during URL fetch
     auto_resume: Option<(Track, f64)>, // track + position to resume on startup
     resume_seek: Option<f64>,         // seek to this position once playback starts
 }
@@ -196,6 +197,7 @@ impl App {
             thumb_cache: HashMap::new(),
             image_picker,
             pending_play: None,
+            mpv_file_sent: false,
             resume_seek: None,
             auto_resume,
         })
@@ -282,26 +284,34 @@ impl App {
             // 2. Drain channel updates (non-blocking)
             let mut mpv_disconnected = false;
             if let Some(ref mut rx) = self.playback_rx {
-                let is_loading = self.state.loading.active || self.pending_play.is_some();
                 loop {
                     match rx.try_recv() {
                         Ok(pb_state) => {
                             let track = self.state.playback.current_track.clone();
                             let volume = self.state.playback.volume;
                             let prev_status = self.state.playback.status;
-                            // Don't let mpv's end-file event overwrite Buffering with Stopped
-                            // during loading — that would trigger a false auto-next
-                            let ignore_stopped = is_loading
+                            // During audio URL fetch (Buffering but load_file not yet
+                            // sent), mpv is still playing the OLD track — ignore its
+                            // status so stale Playing doesn't clear loading.
+                            let buffering = self.state.loading.active
+                                && self.state.loading.kind == state::LoadingKind::Buffering;
+                            let fetching_url = buffering && !self.mpv_file_sent;
+                            // After load_file sent, ignore only Stopped (end-file
+                            // from the old track being replaced).
+                            let ignore_stopped = buffering
+                                && self.mpv_file_sent
                                 && pb_state.status == PlayStatus::Stopped;
                             self.state.playback = pb_state;
                             self.state.playback.current_track = track;
-                            if ignore_stopped {
-                                self.state.playback.status = PlayStatus::Buffering;
+                            if fetching_url || ignore_stopped {
+                                self.state.playback.status = prev_status;
                             }
                             // Only log status transitions, not every frame
                             if self.state.playback.status != prev_status {
-                                if ignore_stopped {
-                                    log("MPV: ignoring Stopped (is_loading=true), keeping Buffering");
+                                if fetching_url {
+                                    log("MPV: ignoring status (URL fetch in progress)");
+                                } else if ignore_stopped {
+                                    log("MPV: ignoring Stopped (load_file sent), keeping Buffering");
                                 } else {
                                     log(&format!("MPV: status -> {:?}", self.state.playback.status));
                                 }
@@ -324,12 +334,14 @@ impl App {
                 self.state.toast_timer = 60;
             }
 
-            // Clear loading state once mpv actually starts playing
+            // Clear loading state once mpv actually starts playing the NEW track
             if self.state.playback.status == PlayStatus::Playing
                 && self.state.loading.active
                 && self.state.loading.kind == state::LoadingKind::Buffering
+                && self.mpv_file_sent
             {
                 self.state.loading.active = false;
+                self.mpv_file_sent = false;
                 // Apply resume seek if pending
                 if let Some(pos) = self.resume_seek.take() {
                     if let Some(ref mut mpv) = self.mpv {
@@ -779,6 +791,7 @@ impl App {
         self.state.loading.message = format!("Loading: {}...", track.title);
         self.state.loading.progress = -1.0;
         self.state.loading.completed = 0;
+        self.mpv_file_sent = false; // load_file not yet called — still fetching URL
 
         let tx = self.bg_tx.clone();
         let url = track.youtube_url.clone();
@@ -828,6 +841,7 @@ impl App {
             // stale end-file events from triggering auto-next
             self.state.loading.active = true;
             self.state.loading.kind = state::LoadingKind::Buffering;
+            self.mpv_file_sent = true; // load_file sent — now accept Playing from mpv
             fft::set_fft_active(true);
             self.load_thumbnail_sync(&track);
 
