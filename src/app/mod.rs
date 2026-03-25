@@ -313,7 +313,10 @@ impl App {
                                 } else if ignore_stopped {
                                     log("MPV: ignoring Stopped (load_file sent), keeping Buffering");
                                 } else {
-                                    log(&format!("MPV: status -> {:?}", self.state.playback.status));
+                                    log(&format!("MPV: status {:?} -> {:?} (loading_active={}, kind={:?}, mpv_file_sent={}, buffering_guard={})",
+                                        prev_status, self.state.playback.status,
+                                        self.state.loading.active, self.state.loading.kind,
+                                        self.mpv_file_sent, buffering));
                                 }
                             }
                             if (self.state.playback.volume - volume).abs() > 0.5 {
@@ -340,6 +343,8 @@ impl App {
                 && self.state.loading.kind == state::LoadingKind::Buffering
                 && self.mpv_file_sent
             {
+                log(&format!("LOADING_CLEAR: Playing detected, clearing loading. track={:?}",
+                    self.state.playback.current_track.as_ref().map(|t| &t.title)));
                 self.state.loading.active = false;
                 self.mpv_file_sent = false;
                 // Apply resume seek if pending
@@ -437,9 +442,10 @@ impl App {
                 && !self.state.loading.active
                 && self.pending_play.is_none()
             {
-                log(&format!("AUTO-NEXT: triggered, queue_index={:?}, queue_len={}, current_track={:?}",
+                log(&format!("AUTO-NEXT: triggered, queue_index={:?}, queue_len={}, current_track={:?}, loading_kind={:?}, mpv_file_sent={}",
                     self.state.queue_index, self.state.queue.len(),
-                    self.state.playback.current_track.as_ref().map(|t| &t.title)));
+                    self.state.playback.current_track.as_ref().map(|t| &t.title),
+                    self.state.loading.kind, self.mpv_file_sent));
                 self.handle_auto_next().await;
             }
 
@@ -483,7 +489,10 @@ impl App {
         match result {
             BgResult::SearchDone(res) => {
                 self.state.searching = false;
-                self.state.loading.active = false;
+                // Don't clear loading if audio is buffering
+                if self.state.loading.kind != state::LoadingKind::Buffering {
+                    self.state.loading.active = false;
+                }
                 match res {
                     Ok(results) => {
                         self.replace_queue(results);
@@ -573,7 +582,9 @@ impl App {
                 }
             }
             BgResult::PlaylistTracksReady(res) => {
-                self.state.loading.active = false;
+                if self.state.loading.kind != state::LoadingKind::Buffering {
+                    self.state.loading.active = false;
+                }
                 if let Ok(tracks) = res {
                     self.replace_queue(tracks);
                 }
@@ -755,12 +766,15 @@ impl App {
             return;
         }
 
-        self.state.loading.active = true;
-        self.state.loading.kind = state::LoadingKind::Thumbnails;
-        self.state.loading.message = format!("Loading {} thumbnails...", tracks.len());
-        self.state.loading.progress = 0.0;
-        self.state.loading.total = tracks.len();
-        self.state.loading.completed = 0;
+        // Don't overwrite audio buffering state — audio loading takes priority
+        if !(self.state.loading.active && self.state.loading.kind == state::LoadingKind::Buffering) {
+            self.state.loading.active = true;
+            self.state.loading.kind = state::LoadingKind::Thumbnails;
+            self.state.loading.message = format!("Loading {} thumbnails...", tracks.len());
+            self.state.loading.progress = 0.0;
+            self.state.loading.total = tracks.len();
+            self.state.loading.completed = 0;
+        }
 
         let tx = self.bg_tx.clone();
         tokio::spawn(async move {
@@ -781,6 +795,10 @@ impl App {
         };
 
         self.record_current_play();
+
+        log(&format!("PLAY_TRACK: idx={idx} title='{}' prev_queue_index={:?} prev_status={:?} loading_active={} loading_kind={:?}",
+            track.title, self.state.queue_index, self.state.playback.status,
+            self.state.loading.active, self.state.loading.kind));
 
         self.state.queue_index = Some(idx);
         self.state.playback.current_track = Some(track.clone());

@@ -72,8 +72,15 @@ impl MpvPlayer {
                                         current_state.status = super::types::PlayStatus::Playing;
                                     }
                                     "end-file" => {
-                                        current_state.status = super::types::PlayStatus::Stopped;
-                                        current_state.position = 0.0;
+                                        // Only treat normal EOF as Stopped (triggers auto-next).
+                                        // Ignore "stop" (loadfile replacing), "redirect", "quit".
+                                        let reason = msg.get("reason")
+                                            .and_then(|r| r.as_str())
+                                            .unwrap_or("eof");
+                                        if reason == "eof" || reason == "error" {
+                                            current_state.status = super::types::PlayStatus::Stopped;
+                                            current_state.position = 0.0;
+                                        }
                                     }
                                     _ => {}
                                 }

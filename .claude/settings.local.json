@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build 2>&1)",
+      "WebSearch",
+      "WebFetch(domain:catppuccin.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:draculatheme.com)",
+      "WebFetch(domain:www.nordtheme.com)",
+      "Bash(cargo check 2>&1 | tail -3)",
+      "Bash(git status -u)",
+      "Bash(cargo check 2>&1 | tail -20)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}
