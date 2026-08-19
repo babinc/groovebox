@@ -10,7 +10,8 @@
       "Bash(cargo check 2>&1 | tail -3)",
       "Bash(git status -u)",
       "Bash(cargo check 2>&1 | tail -20)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(echo $PATH)"
     ]
   }
 }

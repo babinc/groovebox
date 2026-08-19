@@ -35,9 +35,20 @@ A terminal-based YouTube audio player built in Rust. Search, build playlists, an
 
 | Program | Min Version | Install |
 |---------|-------------|---------|
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 2024.01+ | `pip install yt-dlp` |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 2026.08.18+ | `pipx install --pip-args=--pre "yt-dlp[default]"` |
 | [mpv](https://mpv.io/) | 0.37+ | `sudo apt install mpv` / `brew install mpv` |
 | [ffmpeg](https://ffmpeg.org/) | 6.0+ | `sudo apt install ffmpeg` / `brew install ffmpeg` |
+
+> **Install yt-dlp from nightly, not your package manager.** YouTube changes how
+> it hands out stream URLs every few months, and distro packages (and even
+> yt-dlp's own stable releases) routinely lag behind. An out-of-date yt-dlp
+> resolves URLs that mpv can't fetch — tracks appear to load, then sit at 0:00
+> while yt-dlp gets `HTTP 403 Forbidden`. If playback breaks after working
+> fine for months, this is almost always why:
+>
+> ```
+> pipx upgrade yt-dlp
+> ```
 
 groovebox checks for these on startup and tells you what's missing.
 
